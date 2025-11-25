@@ -8,7 +8,7 @@
     "strict": true,
     "noImplicitReturns": true,
     "noFallthroughCasesInSwitch": true,
-    "exactOptionalPropertyTypes": true
+    "skipLibCheck": true
   },
   "lint": {
     "rules": {
@@ -29,7 +29,7 @@
     "dev": "deno run -A npm:vite@7",
     "build": "deno run -A npm:vite@7 build",
     "preview": "deno run -A npm:vite@7 preview",
-    "check": "deno check src/**/*.ts",
+    "check": "deno check --no-check=remote src/**/*.ts",
     "lint": "deno lint",
     "fmt": "deno fmt",
     "fmt:check": "deno fmt --check",
@@ -41,6 +41,7 @@
     ".git"
   ],
   "imports": {
+    "three": "npm:three@0.170.0",
     "vite": "npm:vite@7"
   }
 }

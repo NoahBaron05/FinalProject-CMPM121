@@ -9,5 +9,16 @@ export default {
     target: "esnext",
     outDir: "dist",
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        manualChunks: undefined,
+      },
+    },
+  },
+  esbuild: {
+    target: "esnext",
+  },
+  optimizeDeps: {
+    exclude: ["three"],
   },
 };

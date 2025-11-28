@@ -1,6 +1,8 @@
 {
   "version": "5",
   "specifiers": {
+    "npm:cannon-es@0.20": "0.20.0",
+    "npm:three@0.155.0": "0.155.0",
     "npm:three@0.170.0": "0.170.0",
     "npm:vite@7": "7.2.4_picomatch@4.0.3"
   },
@@ -248,6 +250,12 @@
     "@types/estree@1.0.8": {
       "integrity": "sha512-dWHzHa2WqEXI/O1E9OjrocMTKJl2mSrEolh1Iomrv6U+JuNwaHXsXx9bLu5gG7BUWFIN0skIQJQ/L1rIex4X6w=="
     },
+    "ammojs-typed@1.0.6": {
+      "integrity": "sha512-ut/tD0m5eEdlJ5KK97ma6SIEGZ4FN3AJTSVz8wl6C4EtnpVQdP70lOwgDMJKsHjTohxc2/xEZl6yJfMBZNlQ5w=="
+    },
+    "cannon-es@0.20.0": {
+      "integrity": "sha512-eZhWTZIkFOnMAJOgfXJa9+b3kVlvG+FX4mdkpePev/w/rP5V8NRquGyEozcjPfEoXUlb+p7d9SUcmDSn14prOA=="
+    },
     "esbuild@0.25.12": {
       "integrity": "sha512-bbPBYYrtZbkt6Os6FiTLCTFxvq4tt3JKall1vRwshA3fdVztsLAatFaZobhkBC8/BrPetoa0oksYoKXoG4ryJg==",
       "optionalDependencies": [
@@ -348,6 +356,9 @@
     "source-map-js@1.2.1": {
       "integrity": "sha512-UXWMKhLOwVKb728IUtQPXxfYU+usdybtUrK/8uGE8CQMvrhOpwvzDBwj0QhSL7MQc7vIsISBG8VQ8+IDQxpfQA=="
     },
+    "three@0.155.0": {
+      "integrity": "sha512-sNgCYmDijnIqkD/bMfk+1pHg3YzsxW7V2ChpuP6HCQ8NiZr3RufsXQr8M3SSUMjW4hG+sUk7YbyuY0DncaDTJQ=="
+    },
     "three@0.170.0": {
       "integrity": "sha512-FQK+LEpYc0fBD+J8g6oSEyyNzjp+Q7Ks1C568WWaoMRLW+TkNNWmenWeGgJjV105Gd+p/2ql1ZcjYvNiPZBhuQ=="
     },
@@ -381,7 +392,8 @@
     ],
     "packageJson": {
       "dependencies": [
-        "npm:three@0.170",
+        "npm:cannon-es@0.20",
+        "npm:three@0.155.0",
         "npm:vite@7"
       ]
     }

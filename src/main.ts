@@ -164,8 +164,8 @@ function createRope(
     const body = new CANNON.Body({
       mass,
       shape,
-      linearDamping: 0.3,
-      angularDamping: 0.3,
+      linearDamping: 0.1,
+      angularDamping: 0.1,
     });
     body.position.copy(position);
     physicsWorld.addBody(body);
@@ -214,10 +214,10 @@ function createRope(
   // Create physics body for ball
   const ballShape = new CANNON.Sphere(BALL_RADIUS);
   rope.ballBody = new CANNON.Body({
-    mass: 0.5,
+    mass: 1.5,
     shape: ballShape,
-    linearDamping: 0.2,
-    angularDamping: 0.2,
+    linearDamping: 0.1,
+    angularDamping: 0.1,
   });
   rope.ballBody.position.copy(ballPosition);
   physicsWorld.addBody(rope.ballBody);
@@ -258,7 +258,7 @@ function applyRopeSwing(rope: Rope, deltaTime: number): void {
 
   // Calculate swing position using sine wave for smooth oscillation
   // Swing in X direction (left-right) at the anchor point
-  const swingAmplitude = 1; // how far the anchor moves (in units)
+  const swingAmplitude = 2; // how far the anchor moves (in units)
   const anchorOffsetX = Math.sin(
     rope.elapsedTime * Math.PI * 2 * ROPE_SWING_FREQUENCY,
   ) * swingAmplitude;
@@ -524,13 +524,20 @@ function handleInput(
     // Remove the physical constraint holding the ball
     world.removeConstraint(rope.ballConstraint);
 
-    // Clear it so we don't try to remove it twice
-    rope.ballConstraint = undefined;
-    const _ballConnectionVisual = rope.segmentVisuals.pop();
-    const lastVisual = rope.segmentVisuals[rope.segmentVisuals.length - 1];
-    if (lastVisual) {
-      lastVisual.visible = false;
+    // Remove the last rope segment that's connected to the ball
+    const lastSegment = rope.segments[rope.segments.length - 1];
+    world.removeBody(lastSegment.body);
+    scene.remove(lastSegment.mesh);
+    rope.segments.pop();
+
+    // Remove the visual cylinder connecting last segment to ball
+    const ballConnectionVisual = rope.segmentVisuals.pop();
+    if (ballConnectionVisual) {
+      scene.remove(ballConnectionVisual);
     }
+
+    // Clear the constraint so we don't try to remove it twice
+    rope.ballConstraint = undefined;
   }
 
   if (input.isLooking && !mouseWasPressed) {
@@ -541,8 +548,6 @@ function handleInput(
   if (!input.isLooking) {
     mouseWasPressed = false;
   }
-
-  //console.log("✂️ Rope cut! Ball released.");
 }
 
 // Animation loop
@@ -561,7 +566,7 @@ function createAnimationLoop(
     const deltaTime = Math.min(clock.getDelta(), MAX_DELTA_TIME);
 
     updateCamera(camera, cameraInput, deltaTime);
-    if (rope) handleInput(cameraInput, rope, physicsWorld, camera);
+    if (rope) handleInput(cameraInput, rope, physicsWorld, camera, scene);
     updatePhysics(physicsWorld, rigidBodies, rope, deltaTime);
 
     renderer.render(scene, camera);

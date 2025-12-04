@@ -172,7 +172,7 @@ function createRope(
 
     rope.segments.push({ mesh, body });
 
-    let constraint: CANNON.Constraint;
+    let _constraint: CANNON.Constraint;
 
     // Connect segments with constraints
     if (i === 0) {
@@ -526,7 +526,7 @@ function handleInput(
 
     // Clear it so we don't try to remove it twice
     rope.ballConstraint = undefined;
-    const ballConnectionVisual = rope.segmentVisuals.pop();
+    const _ballConnectionVisual = rope.segmentVisuals.pop();
     const lastVisual = rope.segmentVisuals[rope.segmentVisuals.length - 1];
     if (lastVisual) {
       lastVisual.visible = false;
@@ -542,7 +542,7 @@ function handleInput(
     mouseWasPressed = false;
   }
 
-  console.log("✂️ Rope cut! Ball released.");
+  //console.log("✂️ Rope cut! Ball released.");
 }
 
 // Animation loop

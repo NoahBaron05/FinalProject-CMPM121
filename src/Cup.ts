@@ -15,7 +15,7 @@ export class Cup {
   ) {
     this.mesh = new THREE.Group();
 
-    // Makes Cone Brown
+    //git push Makes Cone Brown
     const basketMaterial = new THREE.MeshStandardMaterial({
       color: 0x8b4513, // brown color
       metalness: 0.1,

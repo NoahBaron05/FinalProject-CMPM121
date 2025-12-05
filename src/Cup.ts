@@ -8,6 +8,14 @@ export class Cup {
   hasScored = false;
   ball: CANNON.Body | null = null;
 
+  // cup shape settings
+  private readonly height = 3.5;
+  private readonly bottomRadius = 0.4;
+  private readonly topRadius = 2.2;
+  private readonly steps = 40;
+  private readonly wallCount = 6;
+  private readonly wallThickness = 0.12;
+
   constructor(
     scene: THREE.Scene,
     physicsWorld: CANNON.World,
@@ -15,93 +23,99 @@ export class Cup {
   ) {
     this.mesh = new THREE.Group();
 
-    //git push Makes Cone Brown
+    // Makes cone brown
     const basketMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8b4513, // brown color
+      color: 0x8b4513,
       metalness: 0.1,
       roughness: 0.95,
       side: THREE.DoubleSide,
     });
 
-    // Creates Parabola shape (Edit this to change cone shape)
-    const height = 3.5;
-    const bottomRadius = 0.4;
-    const topRadius = 2.2;
-    const steps = 40;
-
-    const curvePoints: THREE.Vector2[] = [];
-
-    for (let i = 0; i <= steps; i++) {
-      const t = i / steps;
-
-      const y = -height / 2 + t * height;
-
-      // Parabola (Formula) r = a * t^2 + b
-      const a = topRadius - bottomRadius;
-      const r = bottomRadius + a * (t * t);
-
-      curvePoints.push(new THREE.Vector2(r, y));
-    }
-
-    const lathe = new THREE.LatheGeometry(curvePoints, 60);
-    const coneMesh = new THREE.Mesh(lathe, basketMaterial);
-    coneMesh.position.copy(position);
-    this.mesh.add(coneMesh);
-
+    // Creates parabola shape
+    const cupMesh = this.createParabolaMesh(basketMaterial);
+    cupMesh.position.copy(position);
+    this.mesh.add(cupMesh);
     scene.add(this.mesh);
 
-    // oop to make parabola mech walls
-    const wallThickness = 0.12;
+    // makes parabola collision walls
+    this.createWalls(physicsWorld, position);
 
-    for (let i = 0; i < 6; i++) {
-      const angle = (i / 6) * Math.PI * 2;
+    // bottom collision
+    this.bottomBody = this.createBottom(physicsWorld, position);
 
-      const r = topRadius - 0.15;
-      const wallShape = new CANNON.Box(
-        new CANNON.Vec3(r / 2, height / 2, wallThickness / 2),
-      );
+    // score detection
+    physicsWorld.addEventListener("postStep", () => this.checkBall());
+  }
 
-      const wallBody = new CANNON.Body({ mass: 0 });
-      wallBody.addShape(wallShape);
+  // parabola mesh
+  private createParabolaMesh(material: THREE.Material): THREE.Mesh {
+    const points: THREE.Vector2[] = [];
 
-      const x = position.x + Math.cos(angle) * (r * 0.7);
-      const z = position.z + Math.sin(angle) * (r * 0.7);
+    for (let i = 0; i <= this.steps; i++) {
+      const t = i / this.steps;
+      const y = -this.height / 2 + t * this.height;
 
-      wallBody.position.set(x, position.y, z);
-      wallBody.quaternion.setFromEuler(0, angle, Math.PI * 0.22);
+      // parabola math
+      const r = this.bottomRadius +
+        (this.topRadius - this.bottomRadius) * t * t;
 
-      physicsWorld.addBody(wallBody);
-      this.walls.push(wallBody);
+      points.push(new THREE.Vector2(r, y));
     }
 
-    // Bottom collision circle
-    const bottomShape = new CANNON.Cylinder(
-      bottomRadius,
-      bottomRadius,
+    const geo = new THREE.LatheGeometry(points, 60);
+    return new THREE.Mesh(geo, material);
+  }
+
+  // cup collision walls
+  private createWalls(world: CANNON.World, pos: THREE.Vector3) {
+    const wallH = this.height;
+    const wallR = this.topRadius - 0.15;
+
+    for (let i = 0; i < this.wallCount; i++) {
+      const angle = (i / this.wallCount) * Math.PI * 2;
+
+      const shape = new CANNON.Box(
+        new CANNON.Vec3(wallR / 2, wallH / 2, this.wallThickness / 2),
+      );
+      const body = new CANNON.Body({ mass: 0 });
+      body.addShape(shape);
+
+      const x = pos.x + Math.cos(angle) * (wallR * 0.7);
+      const z = pos.z + Math.sin(angle) * (wallR * 0.7);
+
+      body.position.set(x, pos.y, z);
+      body.quaternion.setFromEuler(0, angle, Math.PI * 0.22);
+
+      world.addBody(body);
+      this.walls.push(body);
+    }
+  }
+
+  // bottom collision circle
+  private createBottom(world: CANNON.World, pos: THREE.Vector3): CANNON.Body {
+    const shape = new CANNON.Cylinder(
+      this.bottomRadius,
+      this.bottomRadius,
       0.25,
       12,
     );
-    this.bottomBody = new CANNON.Body({ mass: 0 });
-    this.bottomBody.addShape(bottomShape);
-    this.bottomBody.position.set(
-      position.x,
-      position.y - height / 2,
-      position.z,
-    );
-    this.bottomBody.quaternion.setFromEuler(Math.PI / 2, 0, 0);
-    physicsWorld.addBody(this.bottomBody);
+    const body = new CANNON.Body({ mass: 0 });
+    body.addShape(shape);
 
-    // Collision Detection
-    physicsWorld.addEventListener("postStep", () => {
-      this.checkBallCollision();
-    });
+    body.position.set(pos.x, pos.y - this.height / 2, pos.z);
+    body.quaternion.setFromEuler(Math.PI / 2, 0, 0);
+
+    world.addBody(body);
+    return body;
   }
 
+  // links ball
   attachBall(ball: CANNON.Body) {
     this.ball = ball;
   }
 
-  checkBallCollision() {
+  // detects scoring
+  private checkBall() {
     if (this.hasScored || !this.ball) return;
 
     const dist = this.ball.position.distanceTo(this.bottomBody.position);
@@ -109,7 +123,7 @@ export class Cup {
     if (dist < 0.9) {
       this.hasScored = true;
 
-      // Make cone glow blue
+      // makes cone glow blue
       this.mesh.children.forEach((child) => {
         if (child instanceof THREE.Mesh) {
           const mat = child.material as THREE.MeshStandardMaterial;

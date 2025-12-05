@@ -1,5 +1,6 @@
 import * as CANNON from "cannon-es";
 import * as THREE from "three";
+import { Cup } from "./Cup";
 import "./style.css";
 
 // Constants
@@ -439,7 +440,8 @@ function createAnimationLoop(
 
     updateCamera(camera, cameraInput, deltaTime);
     updatePhysics(physicsWorld, rigidBodies, rope, deltaTime);
-
+    // Updates the basket every Frame
+    if (typeof cup !== "undefined") cup.update();
     renderer.render(scene, camera);
   };
 }
@@ -451,6 +453,7 @@ function initScene(): void {
     const scene = createScene();
     const camera = createCamera();
     const renderer = createRenderer();
+
     setupLighting(scene);
     setupResizeHandler(camera, renderer);
 
@@ -461,6 +464,10 @@ function initScene(): void {
     // Create objects
     createGround(scene, physicsWorld);
     const rope = createRope(scene, physicsWorld);
+    // Adds the Cup to the ame World
+    const cup = new Cup(scene, physicsWorld, new THREE.Vector3(3, 0.5, 0));
+    cup.attachBall(rope.ballBody);
+
 
     // Setup input
     const cameraInput = setupCameraInput();

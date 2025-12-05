@@ -12,3 +12,23 @@ canvas {
   vertical-align: top;
   border: 1px solid salmon;
 }
+
+#win-text {
+  position: fixed;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 4rem;
+  font-weight: bold;
+  color: white;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 20px 40px;
+  border-radius: 20px;
+  opacity: 0 !important;
+  pointer-events: none;
+  transition: opacity 0.6s ease;
+}
+
+#win-text.show {
+  opacity: 1 !important;
+}

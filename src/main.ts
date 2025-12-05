@@ -646,7 +646,14 @@ function initScene(): void {
     createGround(scene, physicsWorld);
     const rope = createRope(scene, physicsWorld);
     // Adds the Cup to the ame World
-    const cup = new Cup(scene, physicsWorld, new THREE.Vector3(3, 0.5, 0));
+    const cup = new Cup(
+      scene,
+      physicsWorld,
+      new THREE.Vector3(3, 0.5, 0),
+      () => {
+        document.getElementById("win-text")?.classList.add("show");
+      },
+    );
     cup.attachBall(rope.ballBody);
 
     // Setup input

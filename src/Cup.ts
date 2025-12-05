@@ -1,5 +1,5 @@
-import * as THREE from "three";
 import * as CANNON from "cannon-es";
+import * as THREE from "three";
 
 export class Cup {
   mesh: THREE.Group;
@@ -20,8 +20,11 @@ export class Cup {
     scene: THREE.Scene,
     physicsWorld: CANNON.World,
     position = new THREE.Vector3(3, 0.5, 0),
+    onScoreCallback?: () => void,
   ) {
     this.mesh = new THREE.Group();
+
+    this.onScoreCallback = onScoreCallback;
 
     // Makes cone brown
     const basketMaterial = new THREE.MeshStandardMaterial({
@@ -43,9 +46,10 @@ export class Cup {
     // bottom collision
     this.bottomBody = this.createBottom(physicsWorld, position);
 
-    // score detection
-    physicsWorld.addEventListener("postStep", () => this.checkBall());
+    this.createTopTrigger(physicsWorld, position);
   }
+
+  private onScoreCallback?: () => void;
 
   // parabola mesh
   private createParabolaMesh(material: THREE.Material): THREE.Mesh {
@@ -83,7 +87,9 @@ export class Cup {
       const x = pos.x + Math.cos(angle) * (wallR * 0.7);
       const z = pos.z + Math.sin(angle) * (wallR * 0.7);
 
-      body.position.set(x, pos.y, z);
+      const y = pos.y - this.height / 2 + wallH / 2; // align with mesh
+
+      body.position.set(x, y, z);
       body.quaternion.setFromEuler(0, angle, Math.PI * 0.22);
 
       world.addBody(body);
@@ -109,28 +115,54 @@ export class Cup {
     return body;
   }
 
+  private createTopTrigger(world: CANNON.World, pos: THREE.Vector3) {
+    // A thin ring at the top of the cup
+    const triggerHeight = 0.2;
+    const shape = new CANNON.Cylinder(
+      this.topRadius,
+      this.topRadius,
+      triggerHeight,
+      20,
+    );
+
+    const body = new CANNON.Body({
+      mass: 0,
+      type: CANNON.Body.KINEMATIC, // doesn't interfere physically
+      collisionResponse: false, // no bounce, purely a trigger
+    });
+
+    body.addShape(shape);
+
+    // Place the trigger at the cup's opening
+    body.position.set(
+      pos.x,
+      pos.y + this.height / 2 - triggerHeight / 2,
+      pos.z,
+    );
+
+    // Cylinder faces upward
+    body.quaternion.setFromEuler(Math.PI / 2, 0, 0);
+
+    world.addBody(body);
+
+    // Detect ball entering
+    body.addEventListener("collide", (event: CANNON.ICollisionEvent) => {
+      if (event.body === this.ball && !this.hasScored) {
+        this.hasScored = true;
+        this.onScore();
+      }
+    });
+  }
+
   // links ball
   attachBall(ball: CANNON.Body) {
     this.ball = ball;
   }
 
-  // detects scoring
-  private checkBall() {
-    if (this.hasScored || !this.ball) return;
-
-    const dist = this.ball.position.distanceTo(this.bottomBody.position);
-
-    if (dist < 0.9) {
-      this.hasScored = true;
-
-      // makes cone glow blue
-      this.mesh.children.forEach((child) => {
-        if (child instanceof THREE.Mesh) {
-          const mat = child.material as THREE.MeshStandardMaterial;
-          mat.emissive = new THREE.Color(0x0000ff);
-          mat.emissiveIntensity = 1.2;
-        }
-      });
+  onScore() {
+    console.log("Ball scored!");
+    if (this.onScoreCallback) {
+      this.onScoreCallback();
     }
   }
 

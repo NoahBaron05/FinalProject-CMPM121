@@ -1,6 +1,6 @@
 import * as CANNON from "cannon-es";
 import * as THREE from "three";
-import { Cup } from "./Cup";
+import { Cup } from "./Cup.ts";
 import "./style.css";
 
 // Constants
@@ -289,7 +289,9 @@ function setupCameraInput(): CameraInput {
   };
 
   globalThis.addEventListener("keydown", (e: KeyboardEvent) => {
-    input.keys[e.key.toLowerCase()] = true;
+    const key = e.key.toLowerCase();
+    input.keys[key] = true;
+    if (key === "r") input.keys["reset"] = true;
   });
 
   globalThis.addEventListener("keyup", (e: KeyboardEvent) => {
@@ -520,6 +522,7 @@ function handleInput(
   world: CANNON.World,
   camera: THREE.PerspectiveCamera,
   scene: THREE.Scene,
+  cup: Cup,
 ) {
   if (input.keys[" "] && rope.ballConstraint) {
     // Remove the physical constraint holding the ball
@@ -539,6 +542,11 @@ function handleInput(
 
     // Clear the constraint so we don't try to remove it twice
     rope.ballConstraint = undefined;
+  }
+
+  if (input.keys["reset"]) {
+    resetSimulation(scene, world, rope, cup);
+    input.keys["reset"] = false;
   }
 
   if (input.isLooking && !mouseWasPressed) {
@@ -561,18 +569,61 @@ function createAnimationLoop(
   rope: Rope | null,
   renderer: THREE.WebGLRenderer,
   scene: THREE.Scene,
+  cup: Cup,
 ): () => void {
   return function animate(): void {
     requestAnimationFrame(animate);
     const deltaTime = Math.min(clock.getDelta(), MAX_DELTA_TIME);
 
     updateCamera(camera, cameraInput, deltaTime);
-    if (rope) handleInput(cameraInput, rope, physicsWorld, camera, scene);
+    if (rope) handleInput(cameraInput, rope, physicsWorld, camera, scene, cup);
     updatePhysics(physicsWorld, rigidBodies, rope, deltaTime);
     // Updates the basket every Frame
     if (typeof cup !== "undefined") cup.update();
     renderer.render(scene, camera);
   };
+}
+
+function resetSimulation(
+  scene: THREE.Scene,
+  physicsWorld: CANNON.World,
+  rope: Rope,
+  cup: Cup,
+) {
+  // 1. Remove all old physics bodies
+  for (const seg of rope.segments) {
+    physicsWorld.removeBody(seg.body);
+    scene.remove(seg.mesh);
+  }
+
+  physicsWorld.removeBody(rope.ballBody);
+  scene.remove(rope.ballMesh);
+
+  // 2. Remove all constraints
+  for (const c of rope.constraints) {
+    if (c) physicsWorld.removeConstraint(c);
+  }
+  if (rope.ballConstraint) physicsWorld.removeConstraint(rope.ballConstraint);
+
+  // 3. Remove all visual cylinders
+  for (const v of rope.segmentVisuals) {
+    scene.remove(v);
+  }
+
+  rope.segments = [];
+  rope.constraints = [];
+  rope.segmentVisuals = [];
+  rope.elapsedTime = 0;
+  rope.ballConstraint = undefined;
+
+  // 4. Rebuild rope entirely using createRope()
+  const newRope = createRope(scene, physicsWorld);
+
+  // 5. Re-attach new ball to cup
+  cup.attachBall(newRope.ballBody);
+
+  // Copy new values into original rope reference
+  Object.assign(rope, newRope);
 }
 
 // Main initialization
@@ -612,6 +663,7 @@ function initScene(): void {
       rope,
       renderer,
       scene,
+      cup,
     );
     animate();
 

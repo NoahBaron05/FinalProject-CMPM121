@@ -255,27 +255,42 @@ function createRope(
 
 // Apply swinging motion to rope
 function applyRopeSwing(rope: Rope, deltaTime: number): void {
+  if (!rope.ballConstraint) {
+    return;
+  }
+  // protect against tiny deltaTime
+  if (deltaTime <= 0) return;
+
   rope.elapsedTime += deltaTime;
 
-  // Calculate swing position using sine wave for smooth oscillation
-  // Swing in X direction (left-right) at the anchor point
-  const swingAmplitude = 2; // how far the anchor moves (in units)
-  const anchorOffsetX = Math.sin(
-    rope.elapsedTime * Math.PI * 2 * ROPE_SWING_FREQUENCY,
-  ) * swingAmplitude;
+  // Swing parameters
+  const swingAmplitude = 2; // horizontal amplitude (units)
+  const freq = ROPE_SWING_FREQUENCY; // Hz
 
-  // Move the first rope segment to create the swinging motion from the top
-  const firstSegment = rope.segments[0];
-  firstSegment.body.position.x = ROPE_ANCHOR_POINT.x + anchorOffsetX;
-  firstSegment.body.position.y = ROPE_ANCHOR_POINT.y;
-  firstSegment.body.position.z = ROPE_ANCHOR_POINT.z;
+  // Desired target x for the ball (sine-wave)
+  const anchorX = ROPE_ANCHOR_POINT.x;
+  const anchorOffsetX = Math.sin(rope.elapsedTime * Math.PI * 2 * freq) *
+    swingAmplitude;
+  const targetX = anchorX + anchorOffsetX;
 
-  // Set velocity to match the position change for smooth motion
-  const previousX = firstSegment.body.position.x;
-  firstSegment.body.velocity.x =
-    (anchorOffsetX - (previousX - ROPE_ANCHOR_POINT.x)) / deltaTime;
-  firstSegment.body.velocity.y = 0;
-  firstSegment.body.velocity.z = 0;
+  // Current ball x
+  const currentX = rope.ballBody.position.x;
+
+  // Compute velocity required to reach targetX this frame (simple proportional)
+  // This is not a teleport: we only set velocity so physics integrates it naturally.
+  const desiredVelX = (targetX - currentX) / deltaTime;
+
+  // Optionally damp / clamp the velocity to avoid explosion for large delta times
+  const maxVel = 50;
+  const clampedVelX = Math.max(-maxVel, Math.min(maxVel, desiredVelX));
+
+  // Apply the velocity to the ball (leave Y/Z mostly to physics)
+  rope.ballBody.velocity.x = clampedVelX;
+
+  // (Optional) Slightly reduce vertical velocity so the swing stays stable
+  // Comment out if you want pure physics on Y axis
+  rope.ballBody.velocity.y *= 0.98;
+  rope.ballBody.velocity.z *= 0.98;
 }
 
 // Camera input setup
@@ -649,7 +664,7 @@ function initScene(): void {
     const cup = new Cup(
       scene,
       physicsWorld,
-      new THREE.Vector3(3, 0.5, 0),
+      new THREE.Vector3(3, -0.5, 0),
       () => {
         document.getElementById("win-text")?.classList.add("show");
       },

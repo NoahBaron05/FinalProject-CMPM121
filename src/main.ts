@@ -468,7 +468,6 @@ function initScene(): void {
     const cup = new Cup(scene, physicsWorld, new THREE.Vector3(3, 0.5, 0));
     cup.attachBall(rope.ballBody);
 
-
     // Setup input
     const cameraInput = setupCameraInput();
 

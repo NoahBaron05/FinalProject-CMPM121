@@ -11,13 +11,13 @@ export class Cup {
   constructor(
     scene: THREE.Scene,
     physicsWorld: CANNON.World,
-    position = new THREE.Vector3(3, 0.5, 0)
+    position = new THREE.Vector3(3, 0.5, 0),
   ) {
     this.mesh = new THREE.Group();
 
     // Makes Cone Brown
     const basketMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8b4513,   // brown color 
+      color: 0x8b4513, // brown color
       metalness: 0.1,
       roughness: 0.95,
       side: THREE.DoubleSide,
@@ -58,7 +58,7 @@ export class Cup {
 
       const r = topRadius - 0.15;
       const wallShape = new CANNON.Box(
-        new CANNON.Vec3(r / 2, height / 2, wallThickness / 2)
+        new CANNON.Vec3(r / 2, height / 2, wallThickness / 2),
       );
 
       const wallBody = new CANNON.Body({ mass: 0 });
@@ -75,10 +75,19 @@ export class Cup {
     }
 
     // Bottom collision circle
-    const bottomShape = new CANNON.Cylinder(bottomRadius, bottomRadius, 0.25, 12);
+    const bottomShape = new CANNON.Cylinder(
+      bottomRadius,
+      bottomRadius,
+      0.25,
+      12,
+    );
     this.bottomBody = new CANNON.Body({ mass: 0 });
     this.bottomBody.addShape(bottomShape);
-    this.bottomBody.position.set(position.x, position.y - height / 2, position.z);
+    this.bottomBody.position.set(
+      position.x,
+      position.y - height / 2,
+      position.z,
+    );
     this.bottomBody.quaternion.setFromEuler(Math.PI / 2, 0, 0);
     physicsWorld.addBody(this.bottomBody);
 

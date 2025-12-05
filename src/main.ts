@@ -43,6 +43,8 @@ interface Rope {
   ballMesh: THREE.Mesh;
   ballBody: CANNON.Body;
   elapsedTime: number; // for swing animation
+  ballConstraint?: CANNON.Constraint;
+  constraints: CANNON.Constraint[];
 }
 
 // Scene setup functions
@@ -50,6 +52,22 @@ function createScene(): THREE.Scene {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x222222);
   return scene;
+}
+
+function createCrosshair() {
+  const crosshair = document.createElement("div");
+  crosshair.style.position = "absolute";
+  crosshair.style.top = "50%";
+  crosshair.style.left = "50%";
+  crosshair.style.width = "10px";
+  crosshair.style.height = "10px";
+  crosshair.style.backgroundColor = "white";
+  crosshair.style.border = "1px solid black";
+  crosshair.style.borderRadius = "50%";
+  crosshair.style.transform = "translate(-50%, -50%)";
+  crosshair.style.pointerEvents = "none"; // Important: lets clicks pass through to the canvas
+  crosshair.style.zIndex = "100";
+  document.body.appendChild(crosshair);
 }
 
 function createCamera(): THREE.PerspectiveCamera {
@@ -119,6 +137,7 @@ function createRope(
     segmentVisuals: [],
     ballMesh: new THREE.Mesh(),
     ballBody: new CANNON.Body(),
+    constraints: [],
   };
 
   // Create rope segments
@@ -146,13 +165,15 @@ function createRope(
     const body = new CANNON.Body({
       mass,
       shape,
-      linearDamping: 0.3,
-      angularDamping: 0.3,
+      linearDamping: 0.1,
+      angularDamping: 0.1,
     });
     body.position.copy(position);
     physicsWorld.addBody(body);
 
     rope.segments.push({ mesh, body });
+
+    let _constraint: CANNON.Constraint;
 
     // Connect segments with constraints
     if (i === 0) {
@@ -164,6 +185,7 @@ function createRope(
         ROPE_ANCHOR_POINT,
       );
       physicsWorld.addConstraint(constraint);
+      rope.constraints.push(constraint);
     } else {
       // Connect to previous segment with distance constraint
       const constraint = new CANNON.DistanceConstraint(
@@ -172,6 +194,8 @@ function createRope(
         ROPE_SEGMENT_LENGTH,
       );
       physicsWorld.addConstraint(constraint);
+      rope.ballConstraint = constraint;
+      rope.constraints.push(constraint);
     }
   }
 
@@ -191,10 +215,10 @@ function createRope(
   // Create physics body for ball
   const ballShape = new CANNON.Sphere(BALL_RADIUS);
   rope.ballBody = new CANNON.Body({
-    mass: 0.5,
+    mass: 1.5,
     shape: ballShape,
-    linearDamping: 0.2,
-    angularDamping: 0.2,
+    linearDamping: 0.1,
+    angularDamping: 0.1,
   });
   rope.ballBody.position.copy(ballPosition);
   physicsWorld.addBody(rope.ballBody);
@@ -235,7 +259,7 @@ function applyRopeSwing(rope: Rope, deltaTime: number): void {
 
   // Calculate swing position using sine wave for smooth oscillation
   // Swing in X direction (left-right) at the anchor point
-  const swingAmplitude = 1; // how far the anchor moves (in units)
+  const swingAmplitude = 2; // how far the anchor moves (in units)
   const anchorOffsetX = Math.sin(
     rope.elapsedTime * Math.PI * 2 * ROPE_SWING_FREQUENCY,
   ) * swingAmplitude;
@@ -378,6 +402,10 @@ function updatePhysics(
     for (let i = 0; i < rope.segmentVisuals.length; i++) {
       const cylinder = rope.segmentVisuals[i];
 
+      if (i === rope.segmentVisuals.length - 1 && !rope.ballConstraint) {
+        continue;
+      }
+      let isConnected = true;
       // Determine start and end points
       let startPos: THREE.Vector3;
       let endPos: THREE.Vector3;
@@ -385,10 +413,19 @@ function updatePhysics(
       if (i < rope.segments.length - 1) {
         startPos = rope.segments[i].mesh.position;
         endPos = rope.segments[i + 1].mesh.position;
+        if (!rope.constraints[i + 1]) {
+          isConnected = false;
+        }
       } else {
         startPos = rope.segments[rope.segments.length - 1].mesh.position;
         endPos = rope.ballMesh.position;
+        if (!rope.ballConstraint) {
+          isConnected = false;
+        }
       }
+
+      cylinder.visible = isConnected;
+      if (!isConnected) continue;
 
       // Position cylinder at midpoint
       const midpoint = new THREE.Vector3().addVectors(startPos, endPos)
@@ -423,6 +460,97 @@ function setupResizeHandler(
   });
 }
 
+const raycaster = new THREE.Raycaster();
+
+function attemptCut(
+  camera: THREE.PerspectiveCamera,
+  rope: Rope,
+  physicsWorld: CANNON.World,
+  scene: THREE.Scene,
+) {
+  // 1. Raycast from the center of the screen (0,0 in normalized coords)
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+  // 2. Get all rope meshes to check against
+  const ropeMeshes = rope.segments.map((segment) => segment.mesh);
+
+  // 3. Check for intersection
+  const intersects = raycaster.intersectObjects(ropeMeshes);
+
+  if (intersects.length > 0) {
+    // We hit a rope segment!
+    const hitObject = intersects[0].object;
+
+    // Find which segment index owns this mesh
+    const index = rope.segments.findIndex((s) => s.mesh === hitObject);
+
+    if (index !== -1 && rope.constraints[index]) {
+      // Remove the physics constraint
+      physicsWorld.removeConstraint(rope.constraints[index]);
+
+      // Remove it from our list so we know it's cut
+      // (We can't easily delete it from the array without messing up indices,
+      // so we'll just remove it from the world and mark it as processed)
+      delete rope.constraints[index];
+      for (let i = index; i < rope.segments.length; i++) {
+        // Remove physics bodies
+        physicsWorld.removeBody(rope.segments[i].body);
+
+        // Remove meshes from scene
+        scene.remove(rope.segments[i].mesh);
+      }
+      for (let i = index; i < rope.segmentVisuals.length; i++) {
+        scene.remove(rope.segmentVisuals[i]);
+      }
+      if (rope.ballConstraint) {
+        physicsWorld.removeConstraint(rope.ballConstraint);
+        rope.ballConstraint = undefined;
+      }
+      rope.segments.splice(index, rope.segments.length - index);
+      rope.segmentVisuals.splice(index, rope.segmentVisuals.length - index);
+      console.log(`✂️ Cut rope at segment ${index}!`);
+    }
+  }
+}
+let mouseWasPressed = false;
+
+function handleInput(
+  input: CameraInput,
+  rope: Rope,
+  world: CANNON.World,
+  camera: THREE.PerspectiveCamera,
+  scene: THREE.Scene,
+) {
+  if (input.keys[" "] && rope.ballConstraint) {
+    // Remove the physical constraint holding the ball
+    world.removeConstraint(rope.ballConstraint);
+
+    // Remove the last rope segment that's connected to the ball
+    const lastSegment = rope.segments[rope.segments.length - 1];
+    world.removeBody(lastSegment.body);
+    scene.remove(lastSegment.mesh);
+    rope.segments.pop();
+
+    // Remove the visual cylinder connecting last segment to ball
+    const ballConnectionVisual = rope.segmentVisuals.pop();
+    if (ballConnectionVisual) {
+      scene.remove(ballConnectionVisual);
+    }
+
+    // Clear the constraint so we don't try to remove it twice
+    rope.ballConstraint = undefined;
+  }
+
+  if (input.isLooking && !mouseWasPressed) {
+    attemptCut(camera, rope, world, scene);
+    mouseWasPressed = true;
+  }
+
+  if (!input.isLooking) {
+    mouseWasPressed = false;
+  }
+}
+
 // Animation loop
 function createAnimationLoop(
   clock: THREE.Clock,
@@ -439,6 +567,7 @@ function createAnimationLoop(
     const deltaTime = Math.min(clock.getDelta(), MAX_DELTA_TIME);
 
     updateCamera(camera, cameraInput, deltaTime);
+    if (rope) handleInput(cameraInput, rope, physicsWorld, camera, scene);
     updatePhysics(physicsWorld, rigidBodies, rope, deltaTime);
     // Updates the basket every Frame
     if (typeof cup !== "undefined") cup.update();
@@ -451,6 +580,7 @@ function initScene(): void {
   try {
     // Setup scene
     const scene = createScene();
+    createCrosshair();
     const camera = createCamera();
     const renderer = createRenderer();
 

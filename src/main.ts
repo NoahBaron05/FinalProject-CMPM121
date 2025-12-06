@@ -629,9 +629,9 @@ function initScene() {
   scene.add(new THREE.AmbientLight(0xffffff, 1.0));
 
   globalThis.addEventListener("resize", () => {
-    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.aspect = globalThis.innerWidth / globalThis.innerHeight;
     camera.updateProjectionMatrix();
-    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setSize(globalThis.innerWidth, globalThis.innerHeight);
   });
 
   const physicsWorld = createPhysicsWorld();
@@ -704,7 +704,7 @@ function initScene() {
       // Reset logic
       if (input.keys["reset"] && rope && cup) {
         // (Simplified Reset: Reload page or implement full cleanup logic here)
-        window.location.reload();
+        globalThis.location.reload();
       }
     }
 

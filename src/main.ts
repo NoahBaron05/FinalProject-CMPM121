@@ -686,6 +686,48 @@ function spawnKnife(scene: THREE.Scene, physicsWorld: CANNON.World) {
   return { mesh: knifeMesh, body: knifeBody };
 }
 
+function resetSimulation(
+  scene: THREE.Scene,
+  physicsWorld: CANNON.World,
+  rope: Rope,
+  cup: Cup,
+) {
+  // 1. Remove all old physics bodies
+  for (const seg of rope.segments) {
+    physicsWorld.removeBody(seg.body);
+    scene.remove(seg.mesh);
+  }
+
+  physicsWorld.removeBody(rope.ballBody);
+  scene.remove(rope.ballMesh);
+
+  // 2. Remove all constraints
+  for (const c of rope.constraints) {
+    if (c) physicsWorld.removeConstraint(c);
+  }
+  if (rope.ballConstraint) physicsWorld.removeConstraint(rope.ballConstraint);
+
+  // 3. Remove all visual cylinders
+  for (const v of rope.segmentVisuals) {
+    scene.remove(v);
+  }
+
+  rope.segments = [];
+  rope.constraints = [];
+  rope.segmentVisuals = [];
+  rope.elapsedTime = 0;
+  rope.ballConstraint = undefined;
+
+  // 4. Rebuild rope entirely using createRope()
+  const newRope = createRope(scene, physicsWorld);
+
+  // 5. Re-attach new ball to cup
+  cup.attachBall(newRope.ballBody);
+
+  // Copy new values into original rope reference
+  Object.assign(rope, newRope);
+}
+
 // --- Main Init ---
 function initScene() {
   const scene = createScene();

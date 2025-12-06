@@ -486,7 +486,7 @@ function setupCameraInput(): CameraInput {
   globalThis.addEventListener("mouseup", () => input.isLooking = false);
   document.addEventListener("click", () => {
     if (document.pointerLockElement !== document.body) {
-      (document.body as any).requestPointerLock?.();
+      (document.body as HtmlElement).requestPointerLock?.();
     }
   });
   return input;
@@ -561,7 +561,7 @@ function updatePhysics(
   bodies: RigidBodyPair[],
   rope: Rope | null,
   deltaTime: number,
-  scene: THREE.Scene,
+  _scene: THREE.Scene,
 ) {
   if (rope) {
     applyRopeSwing(rope, deltaTime);

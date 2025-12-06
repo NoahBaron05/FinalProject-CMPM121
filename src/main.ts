@@ -14,6 +14,8 @@ const ROPE_ANCHOR_POINT = new CANNON.Vec3(0, 10, 0); // fixed top of rope
 const BALL_RADIUS = 0.4;
 const ROPE_SWING_FREQUENCY = 0.6; // swing frequency in Hz
 
+type GameState = "INTRO" | "GAME";
+
 // Type definitions
 interface RigidBodyPair {
   mesh: THREE.Mesh;
@@ -47,6 +49,44 @@ interface Rope {
   constraints: CANNON.Constraint[];
 }
 
+const state = {
+  current: "INTRO" as GameState,
+  introObjects: [] as THREE.Object3D[],
+  doorPosition: new THREE.Vector3(0, 2, -10),
+};
+
+function createCanvasTexture(
+  text: string,
+  subText: string,
+): THREE.CanvasTexture {
+  const canvas = document.createElement("canvas");
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext("2d")!;
+
+  // Background
+  ctx.fillStyle = "#eeeeee";
+  ctx.fillRect(0, 0, 512, 512);
+
+  // Text
+  ctx.fillStyle = "black";
+  ctx.textAlign = "center";
+
+  ctx.font = "bold 40px Arial";
+  ctx.fillText(text, 256, 200);
+
+  ctx.font = "20px Arial";
+  const lines = subText.split("\n");
+  let y = 250;
+  for (const line of lines) {
+    ctx.fillText(line, 256, y);
+    y += 30;
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  return texture;
+}
+
 // Scene setup functions
 function createScene(): THREE.Scene {
   const scene = new THREE.Scene();
@@ -54,6 +94,7 @@ function createScene(): THREE.Scene {
   return scene;
 }
 
+/*
 function createCrosshair() {
   const crosshair = document.createElement("div");
   crosshair.style.position = "absolute";
@@ -69,6 +110,7 @@ function createCrosshair() {
   crosshair.style.zIndex = "100";
   document.body.appendChild(crosshair);
 }
+*/
 
 function createCamera(): THREE.PerspectiveCamera {
   const camera = new THREE.PerspectiveCamera(
@@ -89,10 +131,29 @@ function createRenderer(): THREE.WebGLRenderer {
   return renderer;
 }
 
+function createCrosshair() {
+  const crosshair = document.createElement("div");
+  Object.assign(crosshair.style, {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    width: "10px",
+    height: "10px",
+    backgroundColor: "white",
+    border: "1px solid black",
+    borderRadius: "50%",
+    transform: "translate(-50%, -50%)",
+    pointerEvents: "none",
+    zIndex: "100",
+  });
+  document.body.appendChild(crosshair);
+}
+/*
 function setupLighting(scene: THREE.Scene): void {
   const light = new THREE.AmbientLight(0xffffff, 1.0);
   scene.add(light);
 }
+*/
 
 // Physics setup functions
 function createPhysicsWorld(): CANNON.World {
@@ -127,7 +188,59 @@ function createGround(
   return { mesh, body };
 }
 
-// Rope simulation functions
+function loadIntroLevel(scene: THREE.Scene) {
+  state.current = "INTRO";
+
+  // 1. Credits Wall (Left)
+  const creditsGeo = new THREE.BoxGeometry(0.5, 4, 4);
+  const creditsMat = new THREE.MeshStandardMaterial({
+    map: createCanvasTexture(
+      "CREDITS",
+      "Created by: Guys can you all enter your name here, Mahir Camci",
+    ),
+  });
+  const creditsWall = new THREE.Mesh(creditsGeo, creditsMat);
+  creditsWall.position.set(-5, 2, 0);
+  scene.add(creditsWall);
+  state.introObjects.push(creditsWall);
+
+  // 2. Instructions Wall (Right)
+  const instrGeo = new THREE.BoxGeometry(0.5, 4, 4);
+  const instrMat = new THREE.MeshStandardMaterial({
+    map: createCanvasTexture(
+      "HOW TO PLAY",
+      "WASD to Move\nMouse to Look\nSpace/Click to Cut Rope\nGoal: Drop ball in Cup",
+    ),
+  });
+  const instrWall = new THREE.Mesh(instrGeo, instrMat);
+  instrWall.position.set(5, 2, 0);
+  scene.add(instrWall);
+  state.introObjects.push(instrWall);
+
+  // 3. The Door (Front)
+  const doorGeo = new THREE.BoxGeometry(3, 5, 0.5);
+  const doorMat = new THREE.MeshStandardMaterial({
+    color: 0x00ff00,
+    transparent: true,
+    opacity: 0.5,
+  });
+  const door = new THREE.Mesh(doorGeo, doorMat);
+  door.position.copy(state.doorPosition);
+  scene.add(door);
+  state.introObjects.push(door);
+
+  // Add a label above door
+  const labelGeo = new THREE.PlaneGeometry(3, 1);
+  const labelMat = new THREE.MeshBasicMaterial({
+    map: createCanvasTexture("ENTER LEVEL 1", "Walk through to start"),
+    side: THREE.DoubleSide,
+  });
+  const label = new THREE.Mesh(labelGeo, labelMat);
+  label.position.set(0, 5, -10);
+  scene.add(label);
+  state.introObjects.push(label);
+}
+
 function createRope(
   scene: THREE.Scene,
   physicsWorld: CANNON.World,
@@ -199,7 +312,7 @@ function createRope(
     }
   }
 
-  // Create ball at end of rope
+  // Ball
   const ballGeometry = new THREE.SphereGeometry(BALL_RADIUS, 16, 16);
   const ballMaterial = new THREE.MeshStandardMaterial({ color: 0xff6b6b }); // red ball
   rope.ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
@@ -253,231 +366,16 @@ function createRope(
   return rope;
 }
 
-// Apply swinging motion to rope
-function applyRopeSwing(rope: Rope, deltaTime: number): void {
-  if (!rope.ballConstraint) {
-    return;
-  }
-  // protect against tiny deltaTime
-  if (deltaTime <= 0) return;
-
+function applyRopeSwing(rope: Rope, deltaTime: number) {
+  if (!rope.ballConstraint || deltaTime <= 0) return;
   rope.elapsedTime += deltaTime;
-
-  // Swing parameters
-  const swingAmplitude = 2; // horizontal amplitude (units)
-  const freq = ROPE_SWING_FREQUENCY; // Hz
-
-  // Desired target x for the ball (sine-wave)
-  const anchorX = ROPE_ANCHOR_POINT.x;
-  const anchorOffsetX = Math.sin(rope.elapsedTime * Math.PI * 2 * freq) *
-    swingAmplitude;
-  const targetX = anchorX + anchorOffsetX;
-
-  // Current ball x
-  const currentX = rope.ballBody.position.x;
-
-  // Compute velocity required to reach targetX this frame (simple proportional)
-  // This is not a teleport: we only set velocity so physics integrates it naturally.
-  const desiredVelX = (targetX - currentX) / deltaTime;
-
-  // Optionally damp / clamp the velocity to avoid explosion for large delta times
-  const maxVel = 50;
-  const clampedVelX = Math.max(-maxVel, Math.min(maxVel, desiredVelX));
-
-  // Apply the velocity to the ball (leave Y/Z mostly to physics)
-  rope.ballBody.velocity.x = clampedVelX;
-
-  // (Optional) Slightly reduce vertical velocity so the swing stays stable
-  // Comment out if you want pure physics on Y axis
+  const targetX = ROPE_ANCHOR_POINT.x +
+    Math.sin(rope.elapsedTime * Math.PI * 2 * ROPE_SWING_FREQUENCY) * 2;
+  const desiredVelX = (targetX - rope.ballBody.position.x) / deltaTime;
+  rope.ballBody.velocity.x = Math.max(-50, Math.min(50, desiredVelX));
   rope.ballBody.velocity.y *= 0.98;
   rope.ballBody.velocity.z *= 0.98;
 }
-
-// Camera input setup
-function setupCameraInput(): CameraInput {
-  const input: CameraInput = {
-    keys: {},
-    mouseDelta: { x: 0, y: 0 },
-    isLooking: false,
-    pitch: 0,
-    yaw: 0,
-  };
-
-  globalThis.addEventListener("keydown", (e: KeyboardEvent) => {
-    const key = e.key.toLowerCase();
-    input.keys[key] = true;
-    if (key === "r") input.keys["reset"] = true;
-  });
-
-  globalThis.addEventListener("keyup", (e: KeyboardEvent) => {
-    input.keys[e.key.toLowerCase()] = false;
-  });
-
-  globalThis.addEventListener("mousemove", (e: MouseEvent) => {
-    if (input.isLooking) {
-      input.mouseDelta.x += e.movementX * MOUSE_SENSITIVITY;
-      input.mouseDelta.y += e.movementY * MOUSE_SENSITIVITY;
-    }
-  });
-
-  globalThis.addEventListener("mousedown", () => {
-    input.isLooking = true;
-  });
-
-  globalThis.addEventListener("mouseup", () => {
-    input.isLooking = false;
-  });
-
-  document.addEventListener("click", () => {
-    if (document.pointerLockElement !== document.body) {
-      const elem = document.body as HtmlElement;
-      elem.requestPointerLock?.();
-    }
-  });
-
-  return input;
-}
-
-// Camera update function
-function updateCamera(
-  camera: THREE.PerspectiveCamera,
-  input: CameraInput,
-  deltaTime: number,
-): void {
-  // Movement
-  const directions = {
-    w: new THREE.Vector3(0, 0, -1),
-    s: new THREE.Vector3(0, 0, 1),
-    a: new THREE.Vector3(-1, 0, 0),
-    d: new THREE.Vector3(1, 0, 0),
-  };
-
-  for (const [key, direction] of Object.entries(directions)) {
-    if (input.keys[key]) {
-      direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), input.yaw);
-      camera.position.addScaledVector(direction, CAMERA_SPEED * deltaTime);
-    }
-  }
-
-  if (input.keys[" "]) {
-    camera.position.y += CAMERA_SPEED * deltaTime;
-  }
-  if (input.keys["shift"]) {
-    camera.position.y -= CAMERA_SPEED * deltaTime;
-  }
-
-  // Rotation
-  input.yaw += input.mouseDelta.x;
-  input.pitch += input.mouseDelta.y;
-  input.pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, input.pitch));
-  input.mouseDelta.x = 0;
-  input.mouseDelta.y = 0;
-
-  camera.rotation.order = "YXZ";
-  camera.rotation.y = input.yaw;
-  camera.rotation.x = input.pitch;
-}
-
-// Physics update function
-function updatePhysics(
-  physicsWorld: CANNON.World,
-  rigidBodies: RigidBodyPair[],
-  rope: Rope | null,
-  deltaTime: number,
-): void {
-  // Apply rope swinging before stepping physics
-  if (rope) {
-    applyRopeSwing(rope, deltaTime);
-  }
-
-  physicsWorld.step(PHYSICS_TIME_STEP, deltaTime, 3);
-
-  for (const { mesh, body } of rigidBodies) {
-    const cannonVec3 = body.position as unknown as THREE.Vector3;
-    const cannonQuat = body.quaternion as unknown as THREE.Quaternion;
-    mesh.position.copy(cannonVec3);
-    mesh.quaternion.copy(cannonQuat);
-  }
-
-  // Update rope visuals
-  if (rope) {
-    // Update rope segment positions
-    for (const segment of rope.segments) {
-      const cannonVec3 = segment.body.position as unknown as THREE.Vector3;
-      const cannonQuat = segment.body.quaternion as unknown as THREE.Quaternion;
-      segment.mesh.position.copy(cannonVec3);
-      segment.mesh.quaternion.copy(cannonQuat);
-    }
-
-    // Update ball position
-    const ballPos = rope.ballBody.position as unknown as THREE.Vector3;
-    const ballQuat = rope.ballBody.quaternion as unknown as THREE.Quaternion;
-    rope.ballMesh.position.copy(ballPos);
-    rope.ballMesh.quaternion.copy(ballQuat);
-
-    // Update connecting cylinders
-    for (let i = 0; i < rope.segmentVisuals.length; i++) {
-      const cylinder = rope.segmentVisuals[i];
-
-      if (i === rope.segmentVisuals.length - 1 && !rope.ballConstraint) {
-        continue;
-      }
-      let isConnected = true;
-      // Determine start and end points
-      let startPos: THREE.Vector3;
-      let endPos: THREE.Vector3;
-
-      if (i < rope.segments.length - 1) {
-        startPos = rope.segments[i].mesh.position;
-        endPos = rope.segments[i + 1].mesh.position;
-        if (!rope.constraints[i + 1]) {
-          isConnected = false;
-        }
-      } else {
-        startPos = rope.segments[rope.segments.length - 1].mesh.position;
-        endPos = rope.ballMesh.position;
-        if (!rope.ballConstraint) {
-          isConnected = false;
-        }
-      }
-
-      cylinder.visible = isConnected;
-      if (!isConnected) continue;
-
-      // Position cylinder at midpoint
-      const midpoint = new THREE.Vector3().addVectors(startPos, endPos)
-        .multiplyScalar(0.5);
-      cylinder.position.copy(midpoint);
-
-      // Calculate distance and rotate cylinder
-      const distance = startPos.distanceTo(endPos);
-      cylinder.scale.y = distance;
-
-      // Rotate to point from start to end
-      const direction = new THREE.Vector3().subVectors(endPos, startPos)
-        .normalize();
-      const quaternion = new THREE.Quaternion();
-      quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), direction);
-      cylinder.quaternion.copy(quaternion);
-    }
-  }
-}
-
-// Handle window resize
-function setupResizeHandler(
-  camera: THREE.PerspectiveCamera,
-  renderer: THREE.WebGLRenderer,
-): void {
-  globalThis.addEventListener("resize", () => {
-    const width = globalThis.innerWidth;
-    const height = globalThis.innerHeight;
-    camera.aspect = width / height;
-    camera.updateProjectionMatrix();
-    renderer.setSize(width, height);
-  });
-}
-
-const raycaster = new THREE.Raycaster();
 
 function attemptCut(
   camera: THREE.PerspectiveCamera,
@@ -485,35 +383,23 @@ function attemptCut(
   physicsWorld: CANNON.World,
   scene: THREE.Scene,
 ) {
-  // 1. Raycast from the center of the screen (0,0 in normalized coords)
+  const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-
-  // 2. Get all rope meshes to check against
-  const ropeMeshes = rope.segments.map((segment) => segment.mesh);
-
-  // 3. Check for intersection
-  const intersects = raycaster.intersectObjects(ropeMeshes);
+  const intersects = raycaster.intersectObjects(
+    rope.segments.map((s) => s.mesh),
+  );
 
   if (intersects.length > 0) {
-    // We hit a rope segment!
-    const hitObject = intersects[0].object;
-
-    // Find which segment index owns this mesh
-    const index = rope.segments.findIndex((s) => s.mesh === hitObject);
+    const obj = intersects[0].object;
+    const index = rope.segments.findIndex((s) => s.mesh === obj);
 
     if (index !== -1 && rope.constraints[index]) {
-      // Remove the physics constraint
       physicsWorld.removeConstraint(rope.constraints[index]);
-
-      // Remove it from our list so we know it's cut
-      // (We can't easily delete it from the array without messing up indices,
-      // so we'll just remove it from the world and mark it as processed)
       delete rope.constraints[index];
-      for (let i = index; i < rope.segments.length; i++) {
-        // Remove physics bodies
-        physicsWorld.removeBody(rope.segments[i].body);
 
-        // Remove meshes from scene
+      // Detach below
+      for (let i = index; i < rope.segments.length; i++) {
+        physicsWorld.removeBody(rope.segments[i].body);
         scene.remove(rope.segments[i].mesh);
       }
       for (let i = index; i < rope.segmentVisuals.length; i++) {
@@ -523,13 +409,13 @@ function attemptCut(
         physicsWorld.removeConstraint(rope.ballConstraint);
         rope.ballConstraint = undefined;
       }
+
       rope.segments.splice(index, rope.segments.length - index);
       rope.segmentVisuals.splice(index, rope.segmentVisuals.length - index);
       console.log(`✂️ Cut rope at segment ${index}!`);
     }
   }
 }
-let mouseWasPressed = false;
 
 function handleInput(
   input: CameraInput,
@@ -538,166 +424,294 @@ function handleInput(
   camera: THREE.PerspectiveCamera,
   scene: THREE.Scene,
   cup: Cup,
-) {
+  mouseWasPressed: boolean,
+): boolean {
+  // Spacebar Cut Logic
   if (input.keys[" "] && rope.ballConstraint) {
-    // Remove the physical constraint holding the ball
     world.removeConstraint(rope.ballConstraint);
 
-    // Remove the last rope segment that's connected to the ball
     const lastSegment = rope.segments[rope.segments.length - 1];
     world.removeBody(lastSegment.body);
     scene.remove(lastSegment.mesh);
     rope.segments.pop();
 
-    // Remove the visual cylinder connecting last segment to ball
-    const ballConnectionVisual = rope.segmentVisuals.pop();
-    if (ballConnectionVisual) {
-      scene.remove(ballConnectionVisual);
-    }
+    const visual = rope.segmentVisuals.pop();
+    if (visual) scene.remove(visual);
 
-    // Clear the constraint so we don't try to remove it twice
     rope.ballConstraint = undefined;
   }
 
+  // Reset
   if (input.keys["reset"]) {
     resetSimulation(scene, world, rope, cup);
     input.keys["reset"] = false;
   }
 
-  if (input.isLooking && !mouseWasPressed) {
+  // Click Cut
+  let pressed = mouseWasPressed;
+  if (input.isLooking && !pressed) {
     attemptCut(camera, rope, world, scene);
-    mouseWasPressed = true;
+    pressed = true;
+  }
+  if (!input.isLooking) {
+    pressed = false;
+  }
+  return pressed;
+}
+
+// --- Input & Cameras ---
+function setupCameraInput(): CameraInput {
+  const input: CameraInput = {
+    keys: {},
+    mouseDelta: { x: 0, y: 0 },
+    isLooking: false,
+    pitch: 0,
+    yaw: 0,
+  };
+  globalThis.addEventListener("keydown", (e) => {
+    input.keys[e.key.toLowerCase()] = true;
+    if (e.key.toLowerCase() === "r") input.keys["reset"] = true;
+  });
+  globalThis.addEventListener(
+    "keyup",
+    (e) => input.keys[e.key.toLowerCase()] = false,
+  );
+  globalThis.addEventListener("mousemove", (e) => {
+    if (input.isLooking) {
+      input.mouseDelta.x += e.movementX * MOUSE_SENSITIVITY;
+      input.mouseDelta.y += e.movementY * MOUSE_SENSITIVITY;
+    }
+  });
+  globalThis.addEventListener("mousedown", () => input.isLooking = true);
+  globalThis.addEventListener("mouseup", () => input.isLooking = false);
+  document.addEventListener("click", () => {
+    if (document.pointerLockElement !== document.body) {
+      (document.body as any).requestPointerLock?.();
+    }
+  });
+  return input;
+}
+
+function updateCamera(
+  camera: THREE.PerspectiveCamera,
+  input: CameraInput,
+  deltaTime: number,
+) {
+  const direction = new THREE.Vector3();
+  const front = new THREE.Vector3(0, 0, -1).applyAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    input.yaw,
+  );
+  const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(
+    new THREE.Vector3(0, 1, 0),
+    input.yaw,
+  );
+
+  if (input.keys["w"]) direction.add(front);
+  if (input.keys["s"]) direction.sub(front);
+  if (input.keys["a"]) direction.sub(right);
+  if (input.keys["d"]) direction.add(right);
+
+  camera.position.addScaledVector(
+    direction.normalize(),
+    CAMERA_SPEED * deltaTime,
+  );
+  if (input.keys["shift"]) camera.position.y -= CAMERA_SPEED * deltaTime;
+
+  input.yaw += input.mouseDelta.x;
+  input.pitch = Math.max(
+    -Math.PI / 2,
+    Math.min(Math.PI / 2, input.pitch + input.mouseDelta.y),
+  );
+  input.mouseDelta = { x: 0, y: 0 };
+  camera.rotation.set(input.pitch, input.yaw, 0, "YXZ");
+}
+/*
+// --- Game Logic ---
+function attemptCut(
+  camera: THREE.PerspectiveCamera,
+  rope: Rope,
+  physicsWorld: CANNON.World,
+  scene: THREE.Scene,
+) {
+  const raycaster = new THREE.Raycaster();
+  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+  const intersects = raycaster.intersectObjects(
+    rope.segments.map((s) => s.mesh),
+  );
+
+  if (intersects.length > 0) {
+    const obj = intersects[0].object;
+    const index = rope.segments.findIndex((s) => s.mesh === obj);
+    if (index !== -1 && rope.constraints[index]) {
+      physicsWorld.removeConstraint(rope.constraints[index]);
+      delete rope.constraints[index];
+      // Only cleanup visuals/physics below the cut for this demo
+      if (rope.ballConstraint) {
+        physicsWorld.removeConstraint(rope.ballConstraint);
+        rope.ballConstraint = undefined;
+      }
+      console.log(`✂️ Cut rope at segment ${index}!`);
+    }
+  }
+}
+*/
+function updatePhysics(
+  world: CANNON.World,
+  bodies: RigidBodyPair[],
+  rope: Rope | null,
+  deltaTime: number,
+  scene: THREE.Scene,
+) {
+  if (rope) {
+    applyRopeSwing(rope, deltaTime);
+
+    // Sync Bodies
+    for (const seg of rope.segments) {
+      seg.mesh.position.copy(seg.body.position as unknown as THREE.Vector3);
+      seg.mesh.quaternion.copy(
+        seg.body.quaternion as unknown as THREE.Quaternion,
+      );
+    }
+    rope.ballMesh.position.copy(
+      rope.ballBody.position as unknown as THREE.Vector3,
+    );
+    rope.ballMesh.quaternion.copy(
+      rope.ballBody.quaternion as unknown as THREE.Quaternion,
+    );
+
+    // Sync Visuals
+    for (let i = 0; i < rope.segmentVisuals.length; i++) {
+      const cyl = rope.segmentVisuals[i];
+
+      let start: THREE.Vector3, end: THREE.Vector3;
+      let isConnected = true;
+
+      if (i < rope.segments.length - 1) {
+        start = rope.segments[i].mesh.position;
+        end = rope.segments[i + 1].mesh.position;
+        if (!rope.constraints[i + 1]) isConnected = false;
+      } else {
+        // Connection to ball
+        start = rope.segments[rope.segments.length - 1].mesh.position;
+        end = rope.ballMesh.position;
+        if (!rope.ballConstraint) isConnected = false;
+      }
+
+      cyl.visible = isConnected;
+      if (isConnected) {
+        cyl.position.copy(
+          new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5),
+        );
+        cyl.scale.y = start.distanceTo(end);
+        cyl.quaternion.setFromUnitVectors(
+          new THREE.Vector3(0, 1, 0),
+          new THREE.Vector3().subVectors(end, start).normalize(),
+        );
+      }
+    }
   }
 
-  if (!input.isLooking) {
-    mouseWasPressed = false;
+  world.step(PHYSICS_TIME_STEP, deltaTime, 3);
+
+  for (const { mesh, body } of bodies) {
+    mesh.position.copy(body.position as unknown as THREE.Vector3);
+    mesh.quaternion.copy(body.quaternion as unknown as THREE.Quaternion);
   }
 }
 
-// Animation loop
-function createAnimationLoop(
-  clock: THREE.Clock,
-  camera: THREE.PerspectiveCamera,
-  cameraInput: CameraInput,
-  physicsWorld: CANNON.World,
-  rigidBodies: RigidBodyPair[],
-  rope: Rope | null,
-  renderer: THREE.WebGLRenderer,
-  scene: THREE.Scene,
-  cup: Cup,
-): () => void {
-  return function animate(): void {
+// --- Main Init ---
+function initScene() {
+  const scene = createScene();
+  createCrosshair();
+  const camera = createCamera();
+  const renderer = createRenderer();
+  scene.add(new THREE.AmbientLight(0xffffff, 1.0));
+
+  globalThis.addEventListener("resize", () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+  });
+
+  const physicsWorld = createPhysicsWorld();
+  const rigidBodies: RigidBodyPair[] = [];
+
+  // Create Ground immediately (shared across levels)
+  createGround(scene, physicsWorld);
+
+  // Load INTRO first
+  loadIntroLevel(scene);
+
+  const input = setupCameraInput();
+  const clock = new THREE.Clock();
+
+  // Variables that will be populated when Game Starts
+  let rope: Rope | null = null;
+  let cup: Cup | undefined = undefined;
+  let mouseWasPressed = false;
+
+  function animate() {
     requestAnimationFrame(animate);
     const deltaTime = Math.min(clock.getDelta(), MAX_DELTA_TIME);
+    updateCamera(camera, input, deltaTime);
 
-    updateCamera(camera, cameraInput, deltaTime);
-    if (rope) handleInput(cameraInput, rope, physicsWorld, camera, scene, cup);
-    updatePhysics(physicsWorld, rigidBodies, rope, deltaTime);
-    // Updates the basket every Frame
-    if (typeof cup !== "undefined") cup.update();
+    // STATE MACHINE
+    if (state.current === "INTRO") {
+      // Check distance to door
+      const dx = camera.position.x - state.doorPosition.x;
+      const dz = camera.position.z - state.doorPosition.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      if (dist < 2.0) {
+        // TRANSITION!
+        console.log("Entering Level 1...");
+        state.current = "GAME";
+
+        // Clean up Intro
+        state.introObjects.forEach((obj) => scene.remove(obj));
+        state.introObjects = [];
+
+        // Load Game
+        rope = createRope(scene, physicsWorld);
+        cup = new Cup(
+          scene,
+          physicsWorld,
+          new THREE.Vector3(3, -0.5, 0),
+          () => document.getElementById("win-text")?.classList.add("show"),
+        );
+        cup.attachBall(rope.ballBody);
+
+        // Teleport Camera slightly so we don't get stuck in the door trigger
+        camera.position.set(0, 5, 10);
+      }
+    } else if (state.current === "GAME") {
+      updatePhysics(physicsWorld, rigidBodies, rope, deltaTime, scene);
+      if (cup) cup.update();
+
+      // Handle input (including spacebar cuts)
+      if (rope && cup) {
+        mouseWasPressed = handleInput(
+          input,
+          rope,
+          physicsWorld,
+          camera,
+          scene,
+          cup,
+          mouseWasPressed,
+        );
+      }
+
+      // Reset logic
+      if (input.keys["reset"] && rope && cup) {
+        // (Simplified Reset: Reload page or implement full cleanup logic here)
+        window.location.reload();
+      }
+    }
+
     renderer.render(scene, camera);
-  };
-}
-
-function resetSimulation(
-  scene: THREE.Scene,
-  physicsWorld: CANNON.World,
-  rope: Rope,
-  cup: Cup,
-) {
-  // 1. Remove all old physics bodies
-  for (const seg of rope.segments) {
-    physicsWorld.removeBody(seg.body);
-    scene.remove(seg.mesh);
   }
 
-  physicsWorld.removeBody(rope.ballBody);
-  scene.remove(rope.ballMesh);
-
-  // 2. Remove all constraints
-  for (const c of rope.constraints) {
-    if (c) physicsWorld.removeConstraint(c);
-  }
-  if (rope.ballConstraint) physicsWorld.removeConstraint(rope.ballConstraint);
-
-  // 3. Remove all visual cylinders
-  for (const v of rope.segmentVisuals) {
-    scene.remove(v);
-  }
-
-  rope.segments = [];
-  rope.constraints = [];
-  rope.segmentVisuals = [];
-  rope.elapsedTime = 0;
-  rope.ballConstraint = undefined;
-
-  // 4. Rebuild rope entirely using createRope()
-  const newRope = createRope(scene, physicsWorld);
-
-  // 5. Re-attach new ball to cup
-  cup.attachBall(newRope.ballBody);
-
-  // Copy new values into original rope reference
-  Object.assign(rope, newRope);
+  animate();
 }
 
-// Main initialization
-function initScene(): void {
-  try {
-    // Setup scene
-    const scene = createScene();
-    createCrosshair();
-    const camera = createCamera();
-    const renderer = createRenderer();
-
-    setupLighting(scene);
-    setupResizeHandler(camera, renderer);
-
-    // Setup physics
-    const physicsWorld = createPhysicsWorld();
-    const rigidBodies: RigidBodyPair[] = [];
-
-    // Create objects
-    createGround(scene, physicsWorld);
-    const rope = createRope(scene, physicsWorld);
-    // Adds the Cup to the ame World
-    const cup = new Cup(
-      scene,
-      physicsWorld,
-      new THREE.Vector3(3, -0.5, 0),
-      () => {
-        document.getElementById("win-text")?.classList.add("show");
-      },
-    );
-    cup.attachBall(rope.ballBody);
-
-    // Setup input
-    const cameraInput = setupCameraInput();
-
-    // Animation loop
-    const clock = new THREE.Clock();
-    const animate = createAnimationLoop(
-      clock,
-      camera,
-      cameraInput,
-      physicsWorld,
-      rigidBodies,
-      rope,
-      renderer,
-      scene,
-      cup,
-    );
-    animate();
-
-    console.log("✓ Scene initialized successfully with rope simulation");
-  } catch (error) {
-    console.error("❌ Error during initialization:", error);
-  }
-}
-
-// Start application
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", initScene);
-} else {
-  initScene();
-}
+initScene();

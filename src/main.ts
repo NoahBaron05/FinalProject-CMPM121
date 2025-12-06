@@ -1,6 +1,7 @@
 import * as CANNON from "cannon-es";
 import * as THREE from "three";
 import { Cup } from "./Cup.ts";
+import { Inventory } from "./Inventory.ts";
 import "./style.css";
 
 // Constants
@@ -54,6 +55,27 @@ const state = {
   introObjects: [] as THREE.Object3D[],
   doorPosition: new THREE.Vector3(0, 2, -10),
 };
+
+class InventoryUI {
+  private container = document.getElementById("inventory-items")!;
+
+  update(inventory: Inventory) {
+    if (!this.container) return;
+
+    const items = inventory.getAll();
+
+    if (items.length === 0) {
+      this.container.innerHTML = "<i>(empty)</i>";
+      return;
+    }
+
+    this.container.innerHTML = items
+      .map((item) => `• ${item}`)
+      .join("<br>");
+  }
+}
+
+export const inventoryUI = new InventoryUI();
 
 function createCanvasTexture(
   text: string,
@@ -188,7 +210,7 @@ function createGround(
   return { mesh, body };
 }
 
-function loadIntroLevel(scene: THREE.Scene) {
+function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
   state.current = "INTRO";
 
   // 1. Credits Wall (Left)
@@ -239,6 +261,9 @@ function loadIntroLevel(scene: THREE.Scene) {
   label.position.set(0, 5, -10);
   scene.add(label);
   state.introObjects.push(label);
+
+  const knife = spawnKnife(scene, physicsWorld);
+  state.introObjects.push(knife.mesh);
 }
 
 function createRope(
@@ -382,6 +407,7 @@ function attemptCut(
   rope: Rope,
   physicsWorld: CANNON.World,
   scene: THREE.Scene,
+  inventory: Inventory,
 ) {
   const raycaster = new THREE.Raycaster();
   raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
@@ -390,6 +416,11 @@ function attemptCut(
   );
 
   if (intersects.length > 0) {
+    if (!inventory.has("knife")) {
+      console.log("❌ You need a knife to cut the rope!");
+      return;
+    }
+
     const obj = intersects[0].object;
     const index = rope.segments.findIndex((s) => s.mesh === obj);
 
@@ -417,6 +448,40 @@ function attemptCut(
   }
 }
 
+const pickupRaycaster = new THREE.Raycaster();
+
+function attemptPickup(
+  camera: THREE.Camera,
+  scene: THREE.Scene,
+  inventory: Inventory,
+) {
+  pickupRaycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
+
+  const intersects = pickupRaycaster.intersectObjects(scene.children, true);
+
+  if (intersects.length === 0) return;
+
+  const hit = intersects[0].object;
+
+  // Only pick up actual pick-up items
+  if (!hit.userData.isPickup) return;
+
+  const itemId = hit.userData.itemId;
+  if (!itemId) return;
+
+  // Add to inventory
+  inventory.add(itemId);
+  inventoryUI.update(inventory);
+
+  // Remove from scene
+  hit.parent?.remove(hit);
+
+  // Remove physics body if exists
+  if (hit.userData.body) {
+    hit.userData.body.world?.removeBody(hit.userData.body);
+  }
+}
+
 function handleInput(
   input: CameraInput,
   rope: Rope,
@@ -425,9 +490,10 @@ function handleInput(
   scene: THREE.Scene,
   cup: Cup,
   mouseWasPressed: boolean,
+  inventory: Inventory,
 ): boolean {
   // Spacebar Cut Logic
-  if (input.keys[" "] && rope.ballConstraint) {
+  if (input.keys[" "] && rope.ballConstraint && inventory.has("knife")) {
     world.removeConstraint(rope.ballConstraint);
 
     const lastSegment = rope.segments[rope.segments.length - 1];
@@ -450,7 +516,8 @@ function handleInput(
   // Click Cut
   let pressed = mouseWasPressed;
   if (input.isLooking && !pressed) {
-    attemptCut(camera, rope, world, scene);
+    attemptCut(camera, rope, world, scene, inventory);
+    attemptPickup(camera, scene, inventory);
     pressed = true;
   }
   if (!input.isLooking) {
@@ -526,36 +593,7 @@ function updateCamera(
   input.mouseDelta = { x: 0, y: 0 };
   camera.rotation.set(input.pitch, input.yaw, 0, "YXZ");
 }
-/*
-// --- Game Logic ---
-function attemptCut(
-  camera: THREE.PerspectiveCamera,
-  rope: Rope,
-  physicsWorld: CANNON.World,
-  scene: THREE.Scene,
-) {
-  const raycaster = new THREE.Raycaster();
-  raycaster.setFromCamera(new THREE.Vector2(0, 0), camera);
-  const intersects = raycaster.intersectObjects(
-    rope.segments.map((s) => s.mesh),
-  );
 
-  if (intersects.length > 0) {
-    const obj = intersects[0].object;
-    const index = rope.segments.findIndex((s) => s.mesh === obj);
-    if (index !== -1 && rope.constraints[index]) {
-      physicsWorld.removeConstraint(rope.constraints[index]);
-      delete rope.constraints[index];
-      // Only cleanup visuals/physics below the cut for this demo
-      if (rope.ballConstraint) {
-        physicsWorld.removeConstraint(rope.ballConstraint);
-        rope.ballConstraint = undefined;
-      }
-      console.log(`✂️ Cut rope at segment ${index}!`);
-    }
-  }
-}
-*/
 function updatePhysics(
   world: CANNON.World,
   bodies: RigidBodyPair[],
@@ -620,6 +658,34 @@ function updatePhysics(
   }
 }
 
+function spawnKnife(scene: THREE.Scene, physicsWorld: CANNON.World) {
+  // --- 3D mesh ---
+  const knifeGeometry = new THREE.BoxGeometry(1, 0.1, 3);
+  const knifeMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+  const knifeMesh = new THREE.Mesh(knifeGeometry, knifeMaterial);
+
+  // Position the mesh in the world
+  const knifePosition = new THREE.Vector3(0, 1, 0);
+  knifeMesh.position.copy(knifePosition);
+  scene.add(knifeMesh);
+
+  // Mark as pickup
+  knifeMesh.userData.isPickup = true;
+  knifeMesh.userData.itemId = "knife";
+
+  // --- Physics body ---
+  const knifeShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.05, 1.5)); // half-sizes match geometry
+  const knifeBody = new CANNON.Body({ mass: 0.2 });
+  knifeBody.addShape(knifeShape);
+  knifeBody.position.copy(knifePosition as unknown as CANNON.Vec3); // same position as mesh
+  physicsWorld.addBody(knifeBody);
+
+  // Link body to mesh for removal on pickup
+  knifeMesh.userData.body = knifeBody;
+
+  return { mesh: knifeMesh, body: knifeBody };
+}
+
 // --- Main Init ---
 function initScene() {
   const scene = createScene();
@@ -641,7 +707,7 @@ function initScene() {
   createGround(scene, physicsWorld);
 
   // Load INTRO first
-  loadIntroLevel(scene);
+  loadIntroLevel(scene, physicsWorld);
 
   const input = setupCameraInput();
   const clock = new THREE.Clock();
@@ -651,6 +717,9 @@ function initScene() {
   let cup: Cup | undefined = undefined;
   let mouseWasPressed = false;
 
+  // Setup inventory
+  const inventory = new Inventory();
+
   function animate() {
     requestAnimationFrame(animate);
     const deltaTime = Math.min(clock.getDelta(), MAX_DELTA_TIME);
@@ -658,20 +727,20 @@ function initScene() {
 
     // STATE MACHINE
     if (state.current === "INTRO") {
+      // Attempt pickup every frame
+      attemptPickup(camera, scene, inventory);
+
       // Check distance to door
       const dx = camera.position.x - state.doorPosition.x;
       const dz = camera.position.z - state.doorPosition.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
       if (dist < 2.0) {
-        // TRANSITION!
         console.log("Entering Level 1...");
         state.current = "GAME";
 
-        // Clean up Intro
         state.introObjects.forEach((obj) => scene.remove(obj));
         state.introObjects = [];
 
-        // Load Game
         rope = createRope(scene, physicsWorld);
         cup = new Cup(
           scene,
@@ -681,14 +750,12 @@ function initScene() {
         );
         cup.attachBall(rope.ballBody);
 
-        // Teleport Camera slightly so we don't get stuck in the door trigger
         camera.position.set(0, 5, 10);
       }
     } else if (state.current === "GAME") {
       updatePhysics(physicsWorld, rigidBodies, rope, deltaTime, scene);
       if (cup) cup.update();
 
-      // Handle input (including spacebar cuts)
       if (rope && cup) {
         mouseWasPressed = handleInput(
           input,
@@ -698,12 +765,11 @@ function initScene() {
           scene,
           cup,
           mouseWasPressed,
+          inventory,
         );
       }
 
-      // Reset logic
       if (input.keys["reset"] && rope && cup) {
-        // (Simplified Reset: Reload page or implement full cleanup logic here)
         globalThis.location.reload();
       }
     }

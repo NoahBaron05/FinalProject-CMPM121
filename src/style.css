@@ -32,3 +32,25 @@ canvas {
 #win-text.show {
   opacity: 1 !important;
 }
+
+#inventory {
+  position: fixed;
+  bottom: 20px;
+  left: 20px;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.55);
+  color: white;
+  font-family: sans-serif;
+  border-radius: 12px;
+  min-width: 180px;
+  font-size: 1.2rem;
+}
+
+#inventory strong {
+  font-size: 1.2rem;
+}
+
+#inventory-items {
+  margin-top: 8px;
+  font-size: 1rem;
+}

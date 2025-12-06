@@ -1,7 +1,7 @@
 import * as CANNON from "cannon-es";
 import * as THREE from "three";
 import { Cup } from "./Cup.ts";
-import { Inventory } from "./Inventory.ts";
+import { Inventory, InventoryUI } from "./Inventory.ts";
 import "./style.css";
 
 // Constants
@@ -55,25 +55,6 @@ const state = {
   introObjects: [] as THREE.Object3D[],
   doorPosition: new THREE.Vector3(0, 2, -10),
 };
-
-class InventoryUI {
-  private container = document.getElementById("inventory-items")!;
-
-  update(inventory: Inventory) {
-    if (!this.container) return;
-
-    const items = inventory.getAll();
-
-    if (items.length === 0) {
-      this.container.innerHTML = "<i>(empty)</i>";
-      return;
-    }
-
-    this.container.innerHTML = items
-      .map((item) => `• ${item}`)
-      .join("<br>");
-  }
-}
 
 export const inventoryUI = new InventoryUI();
 

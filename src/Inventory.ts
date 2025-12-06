@@ -14,3 +14,22 @@ export class Inventory {
     return [...this.items];
   }
 }
+
+export class InventoryUI {
+  private container = document.getElementById("inventory-items")!;
+
+  update(inventory: Inventory) {
+    if (!this.container) return;
+
+    const items = inventory.getAll();
+
+    if (items.length === 0) {
+      this.container.innerHTML = "<i>(empty)</i>";
+      return;
+    }
+
+    this.container.innerHTML = items
+      .map((item) => `• ${item}`)
+      .join("<br>");
+  }
+}

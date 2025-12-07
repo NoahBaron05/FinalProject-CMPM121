@@ -2,6 +2,12 @@ import * as CANNON from "cannon-es";
 import * as THREE from "three";
 import { Cup } from "./Cup.ts";
 import { Inventory, InventoryUI } from "./Inventory.ts";
+import {
+  getLocale,
+  onLocaleChange,
+  setLocale,
+  translate,
+} from "./translation.ts";
 import "./style.css";
 
 // Constants
@@ -14,6 +20,10 @@ const ROPE_SEGMENT_LENGTH = 0.5; // distance between segments
 const ROPE_ANCHOR_POINT = new CANNON.Vec3(0, 10, 0); // fixed top of rope
 const BALL_RADIUS = 0.4;
 const ROPE_SWING_FREQUENCY = 0.6; // swing frequency in Hz
+const introMeshes: {
+  mesh: THREE.Mesh;
+  type: "credits" | "instructions" | "label";
+}[] = [];
 
 type GameState = "INTRO" | "GAME";
 
@@ -57,6 +67,7 @@ const state = {
 };
 
 export const inventoryUI = new InventoryUI();
+createLanguageSelector();
 
 function createCanvasTexture(
   text: string,
@@ -191,6 +202,56 @@ function createGround(
   return { mesh, body };
 }
 
+function createLanguageSelector() {
+  const selector = document.createElement("select");
+  selector.id = "language-selector";
+  selector.options.add(new Option("English", "en"));
+  selector.options.add(new Option("日本語", "jp"));
+  selector.options.add(new Option("العربية", "ar"));
+  selector.value = getLocale();
+  selector.addEventListener("change", () => {
+    setLocale(selector.value);
+  });
+  document.body.appendChild(selector);
+}
+
+function updateLocalizedIntro() {
+  for (const item of introMeshes) {
+    if (item.type === "credits") {
+      (item.mesh.material as THREE.MeshStandardMaterial).map?.dispose();
+      (item.mesh.material as THREE.MeshStandardMaterial).map =
+        createCanvasTexture(
+          translate("intro.credits.title"),
+          translate("intro.credits.names"),
+        );
+      (item.mesh.material as THREE.MeshStandardMaterial).needsUpdate = true;
+    } else if (item.type === "instructions") {
+      (item.mesh.material as THREE.MeshStandardMaterial).map?.dispose();
+      (item.mesh.material as THREE.MeshStandardMaterial).map =
+        createCanvasTexture(
+          translate("intro.instructions.title"),
+          translate("intro.instructions.body"),
+        );
+      (item.mesh.material as THREE.MeshStandardMaterial).needsUpdate = true;
+    } else if (item.type === "label") {
+      (item.mesh.material as THREE.MeshBasicMaterial).map?.dispose();
+      (item.mesh.material as THREE.MeshBasicMaterial).map = createCanvasTexture(
+        translate("intro.enter.title"),
+        translate("intro.enter.subtitle"),
+      );
+      (item.mesh.material as THREE.MeshBasicMaterial).needsUpdate = true;
+    }
+  }
+  const win = document.getElementById("win-text");
+  if (win) win.innerText = translate("ui.winText");
+  const inv = document.getElementById("inventory-label");
+  if (inv) inv.innerText = translate("ui.inventory");
+  const items = document.getElementById("inventory-items");
+  if (items) items.innerText = translate("items.Knife");
+}
+
+onLocaleChange(updateLocalizedIntro);
+
 function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
   state.current = "INTRO";
 
@@ -198,11 +259,12 @@ function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
   const creditsGeo = new THREE.BoxGeometry(0.5, 4, 4);
   const creditsMat = new THREE.MeshStandardMaterial({
     map: createCanvasTexture(
-      "CREDITS",
-      "Created by: Guys can you all enter your name here, Mahir Camci",
+      translate("intro.credits.title"),
+      translate("intro.credits.names"),
     ),
   });
   const creditsWall = new THREE.Mesh(creditsGeo, creditsMat);
+  introMeshes.push({ mesh: creditsWall, type: "credits" });
   creditsWall.position.set(-5, 2, 0);
   scene.add(creditsWall);
   state.introObjects.push(creditsWall);
@@ -211,11 +273,12 @@ function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
   const instrGeo = new THREE.BoxGeometry(0.5, 4, 4);
   const instrMat = new THREE.MeshStandardMaterial({
     map: createCanvasTexture(
-      "HOW TO PLAY",
-      "WASD to Move\nMouse to Look\nSpace/Click to Cut Rope\nGoal: Drop ball in Cup",
+      translate("intro.instructions.title"),
+      translate("intro.instructions.body"),
     ),
   });
   const instrWall = new THREE.Mesh(instrGeo, instrMat);
+  introMeshes.push({ mesh: instrWall, type: "instructions" });
   instrWall.position.set(5, 2, 0);
   scene.add(instrWall);
   state.introObjects.push(instrWall);
@@ -235,10 +298,14 @@ function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
   // Add a label above door
   const labelGeo = new THREE.PlaneGeometry(3, 1);
   const labelMat = new THREE.MeshBasicMaterial({
-    map: createCanvasTexture("ENTER LEVEL 1", "Walk through to start"),
+    map: createCanvasTexture(
+      translate("intro.enter.title"),
+      translate("intro.enter.subtitle"),
+    ),
     side: THREE.DoubleSide,
   });
   const label = new THREE.Mesh(labelGeo, labelMat);
+  introMeshes.push({ mesh: label, type: "label" });
   label.position.set(0, 5, -10);
   scene.add(label);
   state.introObjects.push(label);
@@ -453,6 +520,9 @@ function attemptPickup(
   // Add to inventory
   inventory.add(itemId);
   inventoryUI.update(inventory);
+  document.getElementById("inventory-items")!.innerText = translate(
+    "items.Knife",
+  );
 
   // Remove from scene
   hit.parent?.remove(hit);
@@ -707,6 +777,9 @@ function resetSimulation(
 
   // Copy new values into original rope reference
   Object.assign(rope, newRope);
+
+  // Remove win text
+  document.getElementById("win-text")?.classList.remove("show");
 }
 
 // --- Main Init ---

@@ -1,0 +1,23 @@
+{
+  "intro": {
+    "credits": {
+      "title": "CREDITS",
+      "names": "Created by:\nNOAH BARON,\nMATTHEW EMBREE,\nBAYO BANDELE,\nMAHIR CAMCI,\nNICHOLAS WADSWORTH"
+    },
+    "instructions": {
+      "title": "HOW TO PLAY",
+      "body": "WASD to Move\nMouse to Look\nSpace/Click to Cut Rope\nGoal: Drop ball in Cup"
+    },
+    "enter": {
+      "title": "ENTER LEVEL 1",
+      "subtitle": "Walk through to start"
+    }
+  },
+  "ui": {
+    "winText": "You Win!",
+    "inventory": "Inventory:"
+  },
+  "items": {
+    "Knife": "Knife"
+  }
+}

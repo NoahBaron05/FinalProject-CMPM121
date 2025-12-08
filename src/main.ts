@@ -60,7 +60,7 @@ interface CameraInput {
   yaw: number;
 }
 
-interface HtmlElement extends HTMLElement {
+interface HtmlElement {
   requestPointerLock?: () => void;
 }
 
@@ -217,7 +217,7 @@ function createGround(
   // Visual mesh
   const geometry = new THREE.PlaneGeometry(100, 100);
   geometry.rotateX(-Math.PI / 2);
-  const material = new THREE.MeshStandardMaterial({
+  const material = new THREE.MeshBasicMaterial({
     color: colorMode().ground,
   });
   const mesh = new THREE.Mesh(geometry, material);
@@ -256,7 +256,7 @@ function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
 
   // 1. Credits Wall (Left)
   const creditsGeo = new THREE.BoxGeometry(0.5, 4, 4);
-  const creditsMat = new THREE.MeshStandardMaterial({
+  const creditsMat = new THREE.MeshBasicMaterial({
     map: createCanvasTexture(
       translate("intro.credits.title"),
       translate("intro.credits.names"),
@@ -270,7 +270,7 @@ function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
 
   // 2. Instructions Wall (Right)
   const instrGeo = new THREE.BoxGeometry(0.5, 4, 4);
-  const instrMat = new THREE.MeshStandardMaterial({
+  const instrMat = new THREE.MeshBasicMaterial({
     map: createCanvasTexture(
       translate("intro.instructions.title"),
       translate("intro.instructions.body"),
@@ -284,7 +284,7 @@ function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
 
   // 3. The Door (Front)
   const doorGeo = new THREE.BoxGeometry(3, 5, 0.5);
-  const doorMat = new THREE.MeshStandardMaterial({
+  const doorMat = new THREE.MeshBasicMaterial({
     color: 0x00ff00,
     transparent: true,
     opacity: 0.5,
@@ -323,6 +323,7 @@ function createRope(
     ballMesh: new THREE.Mesh(),
     ballBody: new CANNON.Body(),
     constraints: [],
+    elapsedTime: 0,
   };
 
   // Create rope segments
@@ -337,7 +338,7 @@ function createRope(
 
     // Create small sphere for each segment
     const geometry = new THREE.SphereGeometry(0.15, 8, 8);
-    const material = new THREE.MeshStandardMaterial({
+    const material = new THREE.MeshBasicMaterial({
       color: colorMode().ropeSegment, // brown rope color
     });
     const mesh = new THREE.Mesh(geometry, material);
@@ -386,7 +387,7 @@ function createRope(
 
   // Ball
   const ballGeometry = new THREE.SphereGeometry(BALL_RADIUS, 16, 16);
-  const ballMaterial = new THREE.MeshStandardMaterial({
+  const ballMaterial = new THREE.MeshBasicMaterial({
     color: colorMode().ball,
   });
   rope.ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
@@ -421,7 +422,7 @@ function createRope(
   // Create visual cylinders connecting segments
   for (let i = 0; i < ROPE_SEGMENTS - 1; i++) {
     const cylinderGeometry = new THREE.CylinderGeometry(0.05, 0.05, 1, 8);
-    const cylinderMaterial = new THREE.MeshStandardMaterial({
+    const cylinderMaterial = new THREE.MeshBasicMaterial({
       color: colorMode().cylinder,
     });
     const cylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
@@ -617,21 +618,19 @@ function setupCameraInput(): CameraInput {
 function updateLocalizedIntro() {
   for (const item of introMeshes) {
     if (item.type === "credits") {
-      (item.mesh.material as THREE.MeshStandardMaterial).map?.dispose();
-      (item.mesh.material as THREE.MeshStandardMaterial).map =
-        createCanvasTexture(
-          translate("intro.credits.title"),
-          translate("intro.credits.names"),
-        );
-      (item.mesh.material as THREE.MeshStandardMaterial).needsUpdate = true;
+      (item.mesh.material as THREE.MeshBasicMaterial).map?.dispose();
+      (item.mesh.material as THREE.MeshBasicMaterial).map = createCanvasTexture(
+        translate("intro.credits.title"),
+        translate("intro.credits.names"),
+      );
+      (item.mesh.material as THREE.MeshBasicMaterial).needsUpdate = true;
     } else if (item.type === "instructions") {
-      (item.mesh.material as THREE.MeshStandardMaterial).map?.dispose();
-      (item.mesh.material as THREE.MeshStandardMaterial).map =
-        createCanvasTexture(
-          translate("intro.instructions.title"),
-          translate("intro.instructions.body"),
-        );
-      (item.mesh.material as THREE.MeshStandardMaterial).needsUpdate = true;
+      (item.mesh.material as THREE.MeshBasicMaterial).map?.dispose();
+      (item.mesh.material as THREE.MeshBasicMaterial).map = createCanvasTexture(
+        translate("intro.instructions.title"),
+        translate("intro.instructions.body"),
+      );
+      (item.mesh.material as THREE.MeshBasicMaterial).needsUpdate = true;
     } else if (item.type === "label") {
       (item.mesh.material as THREE.MeshBasicMaterial).map?.dispose();
       (item.mesh.material as THREE.MeshBasicMaterial).map = createCanvasTexture(
@@ -677,7 +676,7 @@ function updateSceneColors(scene: THREE.Scene, rope: Rope | null) {
       child instanceof THREE.Mesh &&
       child.geometry instanceof THREE.PlaneGeometry
     ) {
-      const material = child.material as THREE.MeshStandardMaterial;
+      const material = child.material as THREE.MeshBasicMaterial;
       if (
         material.color.getHex() === 0xe8e8e8 ||
         material.color.getHex() === 0x1a1a1a
@@ -690,24 +689,24 @@ function updateSceneColors(scene: THREE.Scene, rope: Rope | null) {
   // Update rope segments and ball
   if (rope) {
     rope.segments.forEach((seg) => {
-      (seg.mesh.material as THREE.MeshStandardMaterial).color.setHex(
+      (seg.mesh.material as THREE.MeshBasicMaterial).color.setHex(
         colors.ropeSegment,
       );
     });
 
     rope.segmentVisuals.forEach((vis) => {
-      (vis.material as THREE.MeshStandardMaterial).color.setHex(
+      (vis.material as THREE.MeshBasicMaterial).color.setHex(
         colors.ropeSegment,
       );
     });
 
     rope.segmentVisuals.forEach((cyl) => {
-      (cyl.material as THREE.MeshStandardMaterial).color.setHex(
+      (cyl.material as THREE.MeshBasicMaterial).color.setHex(
         colors.cylinder,
       );
     });
 
-    (rope.ballMesh.material as THREE.MeshStandardMaterial).color.setHex(
+    (rope.ballMesh.material as THREE.MeshBasicMaterial).color.setHex(
       colors.ball,
     );
   }
@@ -718,7 +717,7 @@ function updateSceneColors(scene: THREE.Scene, rope: Rope | null) {
       child instanceof THREE.Mesh &&
       child.geometry instanceof THREE.BoxGeometry
     ) {
-      const material = child.material as THREE.MeshStandardMaterial;
+      const material = child.material as THREE.MeshBasicMaterial;
       if (
         material.color.getHex() === 0x00ff00 ||
         material.color.getHex() === 0x00cc00
@@ -731,7 +730,7 @@ function updateSceneColors(scene: THREE.Scene, rope: Rope | null) {
   // Update knife
   scene.children.forEach((child) => {
     if (child instanceof THREE.Mesh && child.userData.itemId === "knife") {
-      (child.material as THREE.MeshStandardMaterial).color.setHex(colors.knife);
+      (child.material as THREE.MeshBasicMaterial).color.setHex(colors.knife);
     }
   });
 }
@@ -840,7 +839,7 @@ function spawnKnife(scene: THREE.Scene, physicsWorld: CANNON.World) {
   // --- 3D mesh ---
   const group = new THREE.Group();
   const knifeGeometry = new THREE.BoxGeometry(0.15, 0.05, 2.5);
-  const knifeMaterial = new THREE.MeshStandardMaterial({
+  const knifeMaterial = new THREE.MeshBasicMaterial({
     color: colorMode().knife,
   });
   const knifeMesh = new THREE.Mesh(knifeGeometry, knifeMaterial);
@@ -848,7 +847,7 @@ function spawnKnife(scene: THREE.Scene, physicsWorld: CANNON.World) {
   group.add(knifeMesh);
 
   const handleGeometry = new THREE.BoxGeometry(0.3, 0.15, 0.8);
-  const handleMaterial = new THREE.MeshStandardMaterial({
+  const handleMaterial = new THREE.MeshBasicMaterial({
     color: 0x8B4513,
   });
   const handle = new THREE.Mesh(handleGeometry, handleMaterial);

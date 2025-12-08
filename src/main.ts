@@ -24,6 +24,25 @@ const introMeshes: {
   mesh: THREE.Mesh;
   type: "credits" | "instructions" | "label";
 }[] = [];
+const DARK_MODE_COLORS = {
+  background: 0x222222,
+  ground: 0x1a1a1a,
+  ropeSegment: 0x8B4513,
+  ball: 0xff6b6b,
+  cylinder: 0x8B4513,
+  door: 0x00ff00,
+  knife: 0xcccccc,
+};
+
+const LIGHT_MODE_COLORS = {
+  background: 0x87CEEB,
+  ground: 0xe8e8e8,
+  ropeSegment: 0xd2691e,
+  ball: 0xff9999,
+  cylinder: 0xd2691e,
+  door: 0x00cc00,
+  knife: 0x858581,
+};
 
 type GameState = "INTRO" | "GAME";
 
@@ -68,6 +87,21 @@ const state = {
 
 export const inventoryUI = new InventoryUI();
 createLanguageSelector();
+let currentTheme: "dark" | "light" = detectSystemTheme();
+
+function detectSystemTheme(): "dark" | "light" {
+  return globalThis.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
+function colorMode() {
+  if (currentTheme === "dark") {
+    return DARK_MODE_COLORS;
+  } else {
+    return LIGHT_MODE_COLORS;
+  }
+}
 
 function createCanvasTexture(
   text: string,
@@ -104,7 +138,7 @@ function createCanvasTexture(
 // Scene setup functions
 function createScene(): THREE.Scene {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x222222);
+  scene.background = new THREE.Color(colorMode().background);
   return scene;
 }
 
@@ -183,7 +217,9 @@ function createGround(
   // Visual mesh
   const geometry = new THREE.PlaneGeometry(100, 100);
   geometry.rotateX(-Math.PI / 2);
-  const material = new THREE.MeshStandardMaterial({ color: 0x808080 });
+  const material = new THREE.MeshStandardMaterial({
+    color: colorMode().ground,
+  });
   const mesh = new THREE.Mesh(geometry, material);
   scene.add(mesh);
 
@@ -214,43 +250,6 @@ function createLanguageSelector() {
   });
   document.body.appendChild(selector);
 }
-
-function updateLocalizedIntro() {
-  for (const item of introMeshes) {
-    if (item.type === "credits") {
-      (item.mesh.material as THREE.MeshStandardMaterial).map?.dispose();
-      (item.mesh.material as THREE.MeshStandardMaterial).map =
-        createCanvasTexture(
-          translate("intro.credits.title"),
-          translate("intro.credits.names"),
-        );
-      (item.mesh.material as THREE.MeshStandardMaterial).needsUpdate = true;
-    } else if (item.type === "instructions") {
-      (item.mesh.material as THREE.MeshStandardMaterial).map?.dispose();
-      (item.mesh.material as THREE.MeshStandardMaterial).map =
-        createCanvasTexture(
-          translate("intro.instructions.title"),
-          translate("intro.instructions.body"),
-        );
-      (item.mesh.material as THREE.MeshStandardMaterial).needsUpdate = true;
-    } else if (item.type === "label") {
-      (item.mesh.material as THREE.MeshBasicMaterial).map?.dispose();
-      (item.mesh.material as THREE.MeshBasicMaterial).map = createCanvasTexture(
-        translate("intro.enter.title"),
-        translate("intro.enter.subtitle"),
-      );
-      (item.mesh.material as THREE.MeshBasicMaterial).needsUpdate = true;
-    }
-  }
-  const win = document.getElementById("win-text");
-  if (win) win.innerText = translate("ui.winText");
-  const inv = document.getElementById("inventory-label");
-  if (inv) inv.innerText = translate("ui.inventory");
-  const items = document.getElementById("inventory-items");
-  if (items) items.innerText = translate("items.Knife");
-}
-
-onLocaleChange(updateLocalizedIntro);
 
 function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
   state.current = "INTRO";
@@ -339,7 +338,7 @@ function createRope(
     // Create small sphere for each segment
     const geometry = new THREE.SphereGeometry(0.15, 8, 8);
     const material = new THREE.MeshStandardMaterial({
-      color: 0x8B4513, // brown rope color
+      color: colorMode().ropeSegment, // brown rope color
     });
     const mesh = new THREE.Mesh(geometry, material);
     mesh.position.copy(position as unknown as THREE.Vector3);
@@ -387,7 +386,9 @@ function createRope(
 
   // Ball
   const ballGeometry = new THREE.SphereGeometry(BALL_RADIUS, 16, 16);
-  const ballMaterial = new THREE.MeshStandardMaterial({ color: 0xff6b6b }); // red ball
+  const ballMaterial = new THREE.MeshStandardMaterial({
+    color: colorMode().ball,
+  });
   rope.ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
 
   const ballPosition = new CANNON.Vec3(
@@ -421,7 +422,7 @@ function createRope(
   for (let i = 0; i < ROPE_SEGMENTS - 1; i++) {
     const cylinderGeometry = new THREE.CylinderGeometry(0.05, 0.05, 1, 8);
     const cylinderMaterial = new THREE.MeshStandardMaterial({
-      color: 0x8B4513,
+      color: colorMode().cylinder,
     });
     const cylinder = new THREE.Mesh(cylinderGeometry, cylinderMaterial);
     scene.add(cylinder);
@@ -596,12 +597,14 @@ function setupCameraInput(): CameraInput {
   );
   globalThis.addEventListener("mousemove", (e) => {
     if (input.isLooking) {
-      input.mouseDelta.x += e.movementX * MOUSE_SENSITIVITY;
-      input.mouseDelta.y += e.movementY * MOUSE_SENSITIVITY;
+      input.mouseDelta.x -= e.movementX * MOUSE_SENSITIVITY;
+      input.mouseDelta.y -= e.movementY * MOUSE_SENSITIVITY;
     }
   });
   globalThis.addEventListener("mousedown", () => input.isLooking = true);
-  globalThis.addEventListener("mouseup", () => input.isLooking = false);
+  globalThis.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") input.isLooking = false;
+  });
   document.addEventListener("click", () => {
     if (document.pointerLockElement !== document.body) {
       (document.body as HtmlElement).requestPointerLock?.();
@@ -610,6 +613,130 @@ function setupCameraInput(): CameraInput {
   return input;
 }
 
+// update localized intro and UI text
+function updateLocalizedIntro() {
+  for (const item of introMeshes) {
+    if (item.type === "credits") {
+      (item.mesh.material as THREE.MeshStandardMaterial).map?.dispose();
+      (item.mesh.material as THREE.MeshStandardMaterial).map =
+        createCanvasTexture(
+          translate("intro.credits.title"),
+          translate("intro.credits.names"),
+        );
+      (item.mesh.material as THREE.MeshStandardMaterial).needsUpdate = true;
+    } else if (item.type === "instructions") {
+      (item.mesh.material as THREE.MeshStandardMaterial).map?.dispose();
+      (item.mesh.material as THREE.MeshStandardMaterial).map =
+        createCanvasTexture(
+          translate("intro.instructions.title"),
+          translate("intro.instructions.body"),
+        );
+      (item.mesh.material as THREE.MeshStandardMaterial).needsUpdate = true;
+    } else if (item.type === "label") {
+      (item.mesh.material as THREE.MeshBasicMaterial).map?.dispose();
+      (item.mesh.material as THREE.MeshBasicMaterial).map = createCanvasTexture(
+        translate("intro.enter.title"),
+        translate("intro.enter.subtitle"),
+      );
+      (item.mesh.material as THREE.MeshBasicMaterial).needsUpdate = true;
+    }
+  }
+  const win = document.getElementById("win-text");
+  if (win) win.innerText = translate("ui.winText");
+  const inv = document.getElementById("inventory-label");
+  if (inv) inv.innerText = translate("ui.inventory");
+  const items = document.getElementById("inventory-items");
+  if (items?.innerText !== "") {
+    if (items) items.innerText = translate("items.Knife");
+  }
+}
+
+// Initial call to set localized text
+onLocaleChange(updateLocalizedIntro);
+
+// --- Theme Handling ---
+function setupThemeListener(scene: THREE.Scene, rope: Rope | null) {
+  const mediaQuery = globalThis.matchMedia("(prefers-color-scheme: dark)");
+  mediaQuery.addEventListener("change", (e) => {
+    currentTheme = e.matches ? "dark" : "light";
+    updateSceneColors(scene, rope);
+  });
+  // Set initial theme
+  currentTheme = detectSystemTheme();
+}
+
+function updateSceneColors(scene: THREE.Scene, rope: Rope | null) {
+  const colors = colorMode();
+
+  // Update background
+  scene.background = new THREE.Color(colors.background);
+
+  // Update ground
+  scene.children.forEach((child) => {
+    if (
+      child instanceof THREE.Mesh &&
+      child.geometry instanceof THREE.PlaneGeometry
+    ) {
+      const material = child.material as THREE.MeshStandardMaterial;
+      if (
+        material.color.getHex() === 0xe8e8e8 ||
+        material.color.getHex() === 0x1a1a1a
+      ) {
+        material.color.setHex(colors.ground);
+      }
+    }
+  });
+
+  // Update rope segments and ball
+  if (rope) {
+    rope.segments.forEach((seg) => {
+      (seg.mesh.material as THREE.MeshStandardMaterial).color.setHex(
+        colors.ropeSegment,
+      );
+    });
+
+    rope.segmentVisuals.forEach((vis) => {
+      (vis.material as THREE.MeshStandardMaterial).color.setHex(
+        colors.ropeSegment,
+      );
+    });
+
+    rope.segmentVisuals.forEach((cyl) => {
+      (cyl.material as THREE.MeshStandardMaterial).color.setHex(
+        colors.cylinder,
+      );
+    });
+
+    (rope.ballMesh.material as THREE.MeshStandardMaterial).color.setHex(
+      colors.ball,
+    );
+  }
+
+  // Update door
+  scene.children.forEach((child) => {
+    if (
+      child instanceof THREE.Mesh &&
+      child.geometry instanceof THREE.BoxGeometry
+    ) {
+      const material = child.material as THREE.MeshStandardMaterial;
+      if (
+        material.color.getHex() === 0x00ff00 ||
+        material.color.getHex() === 0x00cc00
+      ) {
+        material.color.setHex(colors.door);
+      }
+    }
+  });
+
+  // Update knife
+  scene.children.forEach((child) => {
+    if (child instanceof THREE.Mesh && child.userData.itemId === "knife") {
+      (child.material as THREE.MeshStandardMaterial).color.setHex(colors.knife);
+    }
+  });
+}
+
+// --- Update Functions ---
 function updateCamera(
   camera: THREE.PerspectiveCamera,
   input: CameraInput,
@@ -712,7 +839,9 @@ function updatePhysics(
 function spawnKnife(scene: THREE.Scene, physicsWorld: CANNON.World) {
   // --- 3D mesh ---
   const knifeGeometry = new THREE.BoxGeometry(1, 0.1, 3);
-  const knifeMaterial = new THREE.MeshStandardMaterial({ color: 0xcccccc });
+  const knifeMaterial = new THREE.MeshStandardMaterial({
+    color: colorMode().knife,
+  });
   const knifeMesh = new THREE.Mesh(knifeGeometry, knifeMaterial);
 
   // Position the mesh in the world
@@ -812,6 +941,7 @@ function initScene() {
   let rope: Rope | null = null;
   let cup: Cup | undefined = undefined;
   let mouseWasPressed = false;
+  setupThemeListener(scene, rope);
 
   // Setup inventory
   const inventory = new Inventory();
@@ -850,6 +980,7 @@ function initScene() {
       }
     } else if (state.current === "GAME") {
       updatePhysics(physicsWorld, rigidBodies, rope, deltaTime, scene);
+      setupThemeListener(scene, rope);
       if (cup) cup.update();
 
       if (rope && cup) {

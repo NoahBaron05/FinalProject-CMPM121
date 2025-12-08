@@ -510,7 +510,7 @@ function attemptPickup(
 
   if (intersects.length === 0) return;
 
-  const hit = intersects[0].object;
+  const hit = intersects[0].object.parent;
 
   // Only pick up actual pick-up items
   if (!hit.userData.isPickup) return;
@@ -838,32 +838,43 @@ function updatePhysics(
 
 function spawnKnife(scene: THREE.Scene, physicsWorld: CANNON.World) {
   // --- 3D mesh ---
-  const knifeGeometry = new THREE.BoxGeometry(1, 0.1, 3);
+  const group = new THREE.Group();
+  const knifeGeometry = new THREE.BoxGeometry(0.15, 0.05, 2.5);
   const knifeMaterial = new THREE.MeshStandardMaterial({
     color: colorMode().knife,
   });
   const knifeMesh = new THREE.Mesh(knifeGeometry, knifeMaterial);
+  knifeMesh.position.z = 1;
+  group.add(knifeMesh);
+
+  const handleGeometry = new THREE.BoxGeometry(0.3, 0.15, 0.8);
+  const handleMaterial = new THREE.MeshStandardMaterial({
+    color: 0x8B4513,
+  });
+  const handle = new THREE.Mesh(handleGeometry, handleMaterial);
+  handle.position.z = -0.5;
+  group.add(handle);
 
   // Position the mesh in the world
   const knifePosition = new THREE.Vector3(0, 1, 0);
-  knifeMesh.position.copy(knifePosition);
-  scene.add(knifeMesh);
+  group.position.copy(knifePosition);
+  scene.add(group);
 
   // Mark as pickup
-  knifeMesh.userData.isPickup = true;
-  knifeMesh.userData.itemId = "knife";
+  group.userData.isPickup = true;
+  group.userData.itemId = "knife";
 
   // --- Physics body ---
-  const knifeShape = new CANNON.Box(new CANNON.Vec3(0.5, 0.05, 1.5)); // half-sizes match geometry
+  const knifeShape = new CANNON.Box(new CANNON.Vec3(0.075, 0.025, 1.25)); // half-sizes match geometry
   const knifeBody = new CANNON.Body({ mass: 0.2 });
   knifeBody.addShape(knifeShape);
   knifeBody.position.copy(knifePosition as unknown as CANNON.Vec3); // same position as mesh
   physicsWorld.addBody(knifeBody);
 
   // Link body to mesh for removal on pickup
-  knifeMesh.userData.body = knifeBody;
+  group.userData.body = knifeBody;
 
-  return { mesh: knifeMesh, body: knifeBody };
+  return { mesh: group, body: knifeBody };
 }
 
 function resetSimulation(

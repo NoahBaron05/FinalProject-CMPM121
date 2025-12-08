@@ -33,7 +33,6 @@ const DARK_MODE_COLORS = {
   door: 0x00ff00,
   knife: 0xcccccc,
 };
-
 const LIGHT_MODE_COLORS = {
   background: 0x87CEEB,
   ground: 0xe8e8e8,
@@ -56,6 +55,7 @@ interface CameraInput {
   keys: Record<string, boolean>;
   mouseDelta: { x: number; y: number };
   isLooking: boolean;
+  mousePressed: boolean;
   pitch: number;
   yaw: number;
 }
@@ -251,7 +251,11 @@ function createLanguageSelector() {
   document.body.appendChild(selector);
 }
 
-function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
+function loadIntroLevel(
+  scene: THREE.Scene,
+  physicsWorld: CANNON.World,
+  inventory: Inventory,
+) {
   state.current = "INTRO";
 
   // 1. Credits Wall (Left)
@@ -309,8 +313,10 @@ function loadIntroLevel(scene: THREE.Scene, physicsWorld: CANNON.World) {
   scene.add(label);
   state.introObjects.push(label);
 
-  const knife = spawnKnife(scene, physicsWorld);
-  state.introObjects.push(knife.mesh);
+  if (!inventory.has("knife")) {
+    const knife = spawnKnife(scene, physicsWorld);
+    state.introObjects.push(knife.mesh);
+  }
 }
 
 function createRope(
@@ -562,18 +568,18 @@ function handleInput(
 
   // Reset
   if (input.keys["reset"]) {
-    resetSimulation(scene, world, rope, cup);
+    rewindSimulation(scene, world, rope, cup, inventory);
     input.keys["reset"] = false;
   }
 
   // Click Cut
   let pressed = mouseWasPressed;
-  if (input.isLooking && !pressed) {
+  if (input.mousePressed && !pressed) {
     attemptCut(camera, rope, world, scene, inventory);
     attemptPickup(camera, scene, inventory);
     pressed = true;
   }
-  if (!input.isLooking) {
+  if (!input.mousePressed) {
     pressed = false;
   }
   return pressed;
@@ -585,6 +591,7 @@ function setupCameraInput(): CameraInput {
     keys: {},
     mouseDelta: { x: 0, y: 0 },
     isLooking: false,
+    mousePressed: false,
     pitch: 0,
     yaw: 0,
   };
@@ -602,7 +609,13 @@ function setupCameraInput(): CameraInput {
       input.mouseDelta.y -= e.movementY * MOUSE_SENSITIVITY;
     }
   });
-  globalThis.addEventListener("mousedown", () => input.isLooking = true);
+  globalThis.addEventListener("mousedown", (_e) => {
+    input.isLooking = true;
+    input.mousePressed = true;
+  });
+  globalThis.addEventListener("mouseup", (_e) => {
+    input.mousePressed = false;
+  });
   globalThis.addEventListener("keydown", (e) => {
     if (e.key === "Escape") input.isLooking = false;
   });
@@ -876,49 +889,94 @@ function spawnKnife(scene: THREE.Scene, physicsWorld: CANNON.World) {
   return { mesh: group, body: knifeBody };
 }
 
-function resetSimulation(
+function rewindSimulation(
   scene: THREE.Scene,
   physicsWorld: CANNON.World,
   rope: Rope,
   cup: Cup,
+  inventory: Inventory,
 ) {
-  // 1. Remove all old physics bodies
-  for (const seg of rope.segments) {
-    physicsWorld.removeBody(seg.body);
-    scene.remove(seg.mesh);
+  if (state.current === "INTRO" && inventory.has("knife")) {
+    const knife = spawnKnife(scene, physicsWorld);
+    state.introObjects.push(knife.mesh);
+    inventory.remove?.("knife");
+    inventoryUI.update(inventory);
+    const items = document.getElementById("inventory-items");
+    if (items) items.innerText = "";
+    return;
+  } else if (
+    state.current === "GAME" && rope.segments.length === ROPE_SEGMENTS
+  ) {
+    scene.remove(cup.mesh);
+    for (const body of cup.walls) {
+      physicsWorld.removeBody(body);
+    }
+    physicsWorld.removeBody(cup.bottomBody);
+
+    for (const seg of rope.segments) {
+      physicsWorld.removeBody(seg.body);
+      scene.remove(seg.mesh);
+    }
+    physicsWorld.removeBody(rope.ballBody);
+    scene.remove(rope.ballMesh);
+    for (const c of rope.constraints) {
+      if (c) physicsWorld.removeConstraint(c);
+    }
+    if (rope.ballConstraint) physicsWorld.removeConstraint(rope.ballConstraint);
+    for (const v of rope.segmentVisuals) {
+      scene.remove(v);
+    }
+
+    // Clear rope reference
+    rope.segments = [];
+    rope.constraints = [];
+    rope.segmentVisuals = [];
+    rope.elapsedTime = 0;
+    rope.ballConstraint = undefined;
+
+    // Go back to INTRO
+    state.current = "INTRO";
+    loadIntroLevel(scene, physicsWorld, inventory);
+    return;
+  } else {
+    // 1. Remove all old physics bodies
+    for (const seg of rope.segments) {
+      physicsWorld.removeBody(seg.body);
+      scene.remove(seg.mesh);
+    }
+
+    physicsWorld.removeBody(rope.ballBody);
+    scene.remove(rope.ballMesh);
+
+    // 2. Remove all constraints
+    for (const c of rope.constraints) {
+      if (c) physicsWorld.removeConstraint(c);
+    }
+    if (rope.ballConstraint) physicsWorld.removeConstraint(rope.ballConstraint);
+
+    // 3. Remove all visual cylinders
+    for (const v of rope.segmentVisuals) {
+      scene.remove(v);
+    }
+
+    rope.segments = [];
+    rope.constraints = [];
+    rope.segmentVisuals = [];
+    rope.elapsedTime = 0;
+    rope.ballConstraint = undefined;
+
+    // 4. Rebuild rope entirely using createRope()
+    const newRope = createRope(scene, physicsWorld);
+
+    // 5. Re-attach new ball to cup
+    cup.attachBall(newRope.ballBody);
+
+    // Copy new values into original rope reference
+    Object.assign(rope, newRope);
+
+    // Remove win text
+    document.getElementById("win-text")?.classList.remove("show");
   }
-
-  physicsWorld.removeBody(rope.ballBody);
-  scene.remove(rope.ballMesh);
-
-  // 2. Remove all constraints
-  for (const c of rope.constraints) {
-    if (c) physicsWorld.removeConstraint(c);
-  }
-  if (rope.ballConstraint) physicsWorld.removeConstraint(rope.ballConstraint);
-
-  // 3. Remove all visual cylinders
-  for (const v of rope.segmentVisuals) {
-    scene.remove(v);
-  }
-
-  rope.segments = [];
-  rope.constraints = [];
-  rope.segmentVisuals = [];
-  rope.elapsedTime = 0;
-  rope.ballConstraint = undefined;
-
-  // 4. Rebuild rope entirely using createRope()
-  const newRope = createRope(scene, physicsWorld);
-
-  // 5. Re-attach new ball to cup
-  cup.attachBall(newRope.ballBody);
-
-  // Copy new values into original rope reference
-  Object.assign(rope, newRope);
-
-  // Remove win text
-  document.getElementById("win-text")?.classList.remove("show");
 }
 
 // --- Main Init ---
@@ -941,8 +999,11 @@ function initScene() {
   // Create Ground immediately (shared across levels)
   createGround(scene, physicsWorld);
 
+  // Setup inventory
+  const inventory = new Inventory();
+
   // Load INTRO first
-  loadIntroLevel(scene, physicsWorld);
+  loadIntroLevel(scene, physicsWorld, inventory);
 
   const input = setupCameraInput();
   const clock = new THREE.Clock();
@@ -953,9 +1014,6 @@ function initScene() {
   let mouseWasPressed = false;
   setupThemeListener(scene, rope);
 
-  // Setup inventory
-  const inventory = new Inventory();
-
   function animate() {
     requestAnimationFrame(animate);
     const deltaTime = Math.min(clock.getDelta(), MAX_DELTA_TIME);
@@ -965,6 +1023,11 @@ function initScene() {
     if (state.current === "INTRO") {
       // Attempt pickup every frame
       attemptPickup(camera, scene, inventory);
+
+      if (input.keys["reset"] && inventory.has("knife")) {
+        rewindSimulation(scene, physicsWorld, rope!, cup!, inventory);
+        input.keys["reset"] = false;
+      }
 
       // Check distance to door
       const dx = camera.position.x - state.doorPosition.x;

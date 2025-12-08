@@ -10,6 +10,10 @@ export class Inventory {
     return this.items.includes(itemId);
   }
 
+  remove(itemId: string) {
+    this.items.splice(this.items.indexOf(itemId), 1);
+  }
+
   getAll() {
     return [...this.items];
   }

@@ -9,6 +9,7 @@ import {
   translate,
 } from "./translation.ts";
 import "./style.css";
+import { initTouchControls } from "./touchScreenControls.ts";
 
 // Constants
 const CAMERA_SPEED = 15; // units per second
@@ -69,7 +70,7 @@ interface RopeSegment {
   body: CANNON.Body;
 }
 
-interface Rope {
+export interface Rope {
   segments: RopeSegment[];
   segmentVisuals: THREE.Mesh[]; // cylinders connecting segments
   ballMesh: THREE.Mesh;
@@ -619,7 +620,20 @@ function setupCameraInput(): CameraInput {
   globalThis.addEventListener("keydown", (e) => {
     if (e.key === "Escape") input.isLooking = false;
   });
-  document.addEventListener("click", () => {
+  document.addEventListener("click", (e) => {
+    const target = e.target as HTMLElement | null;
+    if (
+      target &&
+      (target.tagName === "SELECT" ||
+        target.tagName === "INPUT" ||
+        target.tagName === "BUTTON" ||
+        target.closest?.("#inventory") ||
+        target.closest?.("#language-selector") ||
+        target.closest?.(".ui"))
+    ) {
+      return;
+    }
+
     if (document.pointerLockElement !== document.body) {
       (document.body as HtmlElement).requestPointerLock?.();
     }
@@ -1013,6 +1027,21 @@ function initScene() {
   let cup: Cup | undefined = undefined;
   let mouseWasPressed = false;
   setupThemeListener(scene, rope);
+
+  // initialize touch controls (mobile)
+  const _touchControls = initTouchControls({
+    input,
+    camera,
+    scene,
+    physicsWorld,
+    inventory,
+    getRope: () => rope!,
+    attemptCut,
+    attemptPickup,
+    touchRadius: 80,
+    tapThresholdMs: 220,
+    lookSensitivity: 0.002,
+  });
 
   function animate() {
     requestAnimationFrame(animate);

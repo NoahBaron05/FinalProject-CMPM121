@@ -20,7 +20,13 @@ const ROPE_SEGMENTS = 12; // number of rope segments
 const ROPE_SEGMENT_LENGTH = 0.5; // distance between segments
 const ROPE_ANCHOR_POINT = new CANNON.Vec3(0, 10, 0); // fixed top of rope
 const BALL_RADIUS = 0.4;
-const ROPE_SWING_FREQUENCY = 0.6; // swing frequency in 
+const ROPE_SWING_FREQUENCY = 0.6; // swing frequency in Hz
+// Gameplay thresholds
+const LOSE_Y_THRESHOLD = -5; // Y position considered lost
+const IMMEDIATE_LOSE_MARGIN = 0.5; // margin below cup top that triggers immediate lose
+const TIMED_LOSE_SETTLE_SPEED = 0.35; // speed below which ball is considered settled
+const TIMED_LOSE_DELAY = 0.25; // seconds to wait before showing lose after settling
+const FAR_CENTER_MULTIPLIER = 1.05; // multiplier for horizontal distance fail
 const introMeshes: {
   mesh: THREE.Mesh;
   type: "credits" | "instructions" | "label";
@@ -47,10 +53,8 @@ const LIGHT_MODE_COLORS = {
 type GameState = "INTRO" | "GAME";
 
 // Type definitions
-interface RigidBodyPair {
-  mesh: THREE.Mesh;
-  body: CANNON.Body;
-}
+// RigidBodyPair removed — per-frame syncing of generic rigid bodies
+// was unused; rope and other objects are synced explicitly.
 
 interface CameraInput {
   keys: Record<string, boolean>;
@@ -143,24 +147,6 @@ function createScene(): THREE.Scene {
   return scene;
 }
 
-/*
-function createCrosshair() {
-  const crosshair = document.createElement("div");
-  crosshair.style.position = "absolute";
-  crosshair.style.top = "50%";
-  crosshair.style.left = "50%";
-  crosshair.style.width = "10px";
-  crosshair.style.height = "10px";
-  crosshair.style.backgroundColor = "white";
-  crosshair.style.border = "1px solid black";
-  crosshair.style.borderRadius = "50%";
-  crosshair.style.transform = "translate(-50%, -50%)";
-  crosshair.style.pointerEvents = "none"; // Important: lets clicks pass through to the canvas
-  crosshair.style.zIndex = "100";
-  document.body.appendChild(crosshair);
-}
-*/
-
 function createCamera(): THREE.PerspectiveCamera {
   const camera = new THREE.PerspectiveCamera(
     75,
@@ -197,12 +183,7 @@ function createCrosshair() {
   });
   document.body.appendChild(crosshair);
 }
-/*
-function setupLighting(scene: THREE.Scene): void {
-  const light = new THREE.AmbientLight(0xffffff, 1.0);
-  scene.add(light);
-}
-*/
+// NOTE: lighting is applied directly when creating the scene (ambient light).
 
 // Physics setup functions
 function createPhysicsWorld(): CANNON.World {
@@ -214,7 +195,7 @@ function createPhysicsWorld(): CANNON.World {
 function createGround(
   scene: THREE.Scene,
   physicsWorld: CANNON.World,
-): RigidBodyPair {
+) {
   // Visual mesh
   const geometry = new THREE.PlaneGeometry(100, 100);
   geometry.rotateX(-Math.PI / 2);
@@ -250,6 +231,20 @@ function createLanguageSelector() {
     setLocale(selector.value);
   });
   document.body.appendChild(selector);
+}
+
+// UI helpers
+function showWin() {
+  document.getElementById("win-text")?.classList.add("show");
+}
+
+function showLose() {
+  document.getElementById("lose-text")?.classList.add("show");
+}
+
+function hideWinLose() {
+  document.getElementById("win-text")?.classList.remove("show");
+  document.getElementById("lose-text")?.classList.remove("show");
 }
 
 function showIntroMessage() {
@@ -630,13 +625,14 @@ function setupCameraInput(): CameraInput {
     yaw: 0,
   };
   globalThis.addEventListener("keydown", (e) => {
-    input.keys[e.key.toLowerCase()] = true;
-    if (e.key.toLowerCase() === "r") input.keys["reset"] = true;
+    const k = e.key.toLowerCase();
+    input.keys[k] = true;
+    if (k === "r") input.keys["reset"] = true;
+    if (e.key === "Escape") input.isLooking = false;
   });
-  globalThis.addEventListener(
-    "keyup",
-    (e) => input.keys[e.key.toLowerCase()] = false,
-  );
+  globalThis.addEventListener("keyup", (e) => {
+    input.keys[e.key.toLowerCase()] = false;
+  });
   globalThis.addEventListener("mousemove", (e) => {
     if (input.isLooking) {
       input.mouseDelta.x -= e.movementX * MOUSE_SENSITIVITY;
@@ -721,11 +717,11 @@ onLocaleChange(updateLocalizedIntro);
 updateLocalizedIntro();
 
 // --- Theme Handling ---
-function setupThemeListener(scene: THREE.Scene, rope: Rope | null) {
+function setupThemeListener(scene: THREE.Scene, getRope: () => Rope | null) {
   const mediaQuery = globalThis.matchMedia("(prefers-color-scheme: dark)");
   mediaQuery.addEventListener("change", (e) => {
     currentTheme = e.matches ? "dark" : "light";
-    updateSceneColors(scene, rope);
+    updateSceneColors(scene, getRope());
   });
   // Set initial theme
   currentTheme = detectSystemTheme();
@@ -840,7 +836,6 @@ function updateCamera(
 
 function updatePhysics(
   world: CANNON.World,
-  bodies: RigidBodyPair[],
   rope: Rope | null,
   deltaTime: number,
   _scene: THREE.Scene,
@@ -895,11 +890,6 @@ function updatePhysics(
   }
 
   world.step(PHYSICS_TIME_STEP, deltaTime, 3);
-
-  for (const { mesh, body } of bodies) {
-    mesh.position.copy(body.position as unknown as THREE.Vector3);
-    mesh.quaternion.copy(body.quaternion as unknown as THREE.Quaternion);
-  }
 }
 
 function spawnKnife(scene: THREE.Scene, physicsWorld: CANNON.World) {
@@ -1034,9 +1024,8 @@ function rewindSimulation(
     // Copy new values into original rope reference
     Object.assign(rope, newRope);
 
-    // Remove win text and lose text
-    document.getElementById("win-text")?.classList.remove("show");
-    document.getElementById("lose-text")?.classList.remove("show");
+    // Remove win/lose UI
+    hideWinLose();
   }
 }
 
@@ -1055,7 +1044,6 @@ function initScene() {
   });
 
   const physicsWorld = createPhysicsWorld();
-  const rigidBodies: RigidBodyPair[] = [];
 
   // Create Ground immediately (shared across levels)
   createGround(scene, physicsWorld);
@@ -1074,7 +1062,7 @@ function initScene() {
   let cup: Cup | undefined = undefined;
   let mouseWasPressed = false;
   let ballLostSince: number | null = null; // ms timestamp when ball settled outside cup
-  setupThemeListener(scene, rope);
+  setupThemeListener(scene, () => rope);
 
   // initialize touch controls (mobile)
   const _touchControls = initTouchControls({
@@ -1127,20 +1115,22 @@ function initScene() {
           scene,
           physicsWorld,
           new THREE.Vector3(3, -0.5, 0),
-          () => document.getElementById("win-text")?.classList.add("show"),
+          showWin,
         );
         cup.attachBall(rope.ballBody);
 
         camera.position.set(0, 5, 10);
       }
     } else if (state.current === "GAME") {
-      updatePhysics(physicsWorld, rigidBodies, rope, deltaTime, scene);
-      setupThemeListener(scene, rope);
+      updatePhysics(physicsWorld, rope, deltaTime, scene);
       if (cup) cup.update();
       // --- Lose Condition ---
       // If ball falls below Y = -5, player misses (only if not already scored)
-      if (rope && cup && !cup.hasScored && rope.ballBody.position.y < -5) {
-        document.getElementById("lose-text")?.classList.add("show");
+      if (
+        rope && cup && !cup.hasScored &&
+        rope.ballBody.position.y < LOSE_Y_THRESHOLD
+      ) {
+        showLose();
       }
 
       if (rope && cup) {
@@ -1165,8 +1155,11 @@ function initScene() {
         if (!cup.hasScored) {
           const ball = rope.ballBody;
           const topY = cup.getTopY();
-          if (!cup.isBallInside(ball) && ball.position.y < topY - 0.5) {
-            document.getElementById("lose-text")?.classList.add("show");
+          if (
+            !cup.isBallInside(ball) &&
+            ball.position.y < topY - IMMEDIATE_LOSE_MARGIN
+          ) {
+            showLose();
           }
         }
 
@@ -1193,16 +1186,16 @@ function initScene() {
           // conditions for starting the lost timer: ball is outside opening
           // and either below the opening plane or horizontally far from center
           const belowOpening = ball.position.y < topY - 0.2;
-          const farFromCenter = horizDist > topRadius * 1.05;
-          const settled = speed < 0.35;
+          const farFromCenter = horizDist > topRadius * FAR_CENTER_MULTIPLIER;
+          const settled = speed < TIMED_LOSE_SETTLE_SPEED;
 
           if (!isInside && settled && (belowOpening || farFromCenter)) {
             if (ballLostSince == null) ballLostSince = now;
 
             const elapsed = (now - ballLostSince) / 1000;
             // show lose quickly once ball has settled outside
-            if (elapsed >= 0.25) {
-              document.getElementById("lose-text")?.classList.add("show");
+            if (elapsed >= TIMED_LOSE_DELAY) {
+              showLose();
             }
           } else {
             ballLostSince = null;
@@ -1212,9 +1205,7 @@ function initScene() {
 
       if (input.keys["reset"] && rope && cup) {
         // Full immediate restart: clear win/lose UI and rewind the scene
-        document.getElementById("win-text")?.classList.remove("show");
-        document.getElementById("lose-text")?.classList.remove("show");
-
+        hideWinLose();
         rewindSimulation(scene, physicsWorld, rope!, cup!, inventory);
 
         input.keys["reset"] = false;

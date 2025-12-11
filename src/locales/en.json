@@ -6,7 +6,8 @@
     },
     "instructions": {
       "title": "HOW TO PLAY",
-      "body": "WASD to Move\nMouse to Look\nSpace/Click to Cut Rope\nGoal: Drop ball in Cup"
+      "body": "WASD to Move\nMouse to Look\nSpace/Click to Cut Rope\nGoal: Drop ball in Cup",
+      "introMessage": "Pick up the knife to begin"
     },
     "enter": {
       "title": "ENTER LEVEL 1",
@@ -15,7 +16,12 @@
   },
   "ui": {
     "winText": "You Win!",
+    "loseText": "You Lose!",
     "inventory": "Inventory:"
+  },
+  "messages": {
+    "pickupKnife": "Pick up the knife to begin",
+    "cutRope": "Now enter the level and CUT THE ROPE!"
   },
   "items": {
     "Knife": "Knife"

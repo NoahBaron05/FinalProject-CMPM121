@@ -145,13 +145,9 @@ export class Cup {
 
     world.addBody(body);
 
-    // Detect ball entering
-    body.addEventListener("collide", (event: CANNON.ICollisionEvent) => {
-      if (event.body === this.ball && !this.hasScored) {
-        this.hasScored = true;
-        this.onScore();
-      }
-    });
+    // Note: we removed immediate collide-based scoring because it's
+    // prone to false positives when the ball briefly touches the top ring.
+    // Scoring is handled by `updateBall` which checks containment over time.
   }
 
   // links ball
@@ -159,11 +155,87 @@ export class Cup {
     this.ball = ball;
   }
 
+  // Public getters used by game logic for more robust lose detection
+  public getTopY(): number {
+    return this.bottomBody.position.y + this.height;
+  }
+
+  public getCenterXZ(): { x: number; z: number } {
+    return { x: this.bottomBody.position.x, z: this.bottomBody.position.z };
+  }
+
+  public getTopRadius(): number {
+    return this.topRadius;
+  }
+
+  // Returns true if the given ball body is within the cup opening
+  public isBallInside(ball: CANNON.Body | null): boolean {
+    if (!ball) return false;
+
+    const bx = (ball.position as CANNON.Vec3).x;
+    const bz = (ball.position as CANNON.Vec3).z;
+    const by = (ball.position as CANNON.Vec3).y;
+
+    const centerX = this.bottomBody.position.x;
+    const centerZ = this.bottomBody.position.z;
+    const bottomY = this.bottomBody.position.y;
+    const topY = bottomY + this.height;
+
+    const dx = bx - centerX;
+    const dz = bz - centerZ;
+    const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+
+    // inside vertically and horizontally (use slightly smaller radius to avoid edge cases)
+    return by > bottomY && by < topY && horizontalDist < this.topRadius * 0.9;
+  }
+
   onScore() {
     console.log("Ball scored!");
     if (this.onScoreCallback) {
       this.onScoreCallback();
     }
+  }
+
+  // Track how long the ball has remained inside the cup before confirming score
+  private insideSince: number | null = null;
+  private readonly holdTime = 0.2; // seconds required to stay inside
+  private readonly speedThreshold = 0.6; // max speed allowed while counting
+
+  // Call each frame with the tracked ball body to perform timed scoring.
+  public updateBall(ball: CANNON.Body | null, now = performance.now()) {
+    if (this.hasScored) return;
+
+    if (!ball) {
+      this.insideSince = null;
+      return;
+    }
+
+    const inside = this.isBallInside(ball);
+
+    const vx = (ball.velocity as CANNON.Vec3).x;
+    const vy = (ball.velocity as CANNON.Vec3).y;
+    const vz = (ball.velocity as CANNON.Vec3).z;
+    const speed = Math.sqrt(vx * vx + vy * vy + vz * vz);
+
+    // only start/count when ball is relatively still and inside
+    if (inside && speed <= this.speedThreshold) {
+      if (this.insideSince == null) this.insideSince = now;
+
+      const elapsed = (now - this.insideSince) / 1000;
+      if (elapsed >= this.holdTime) {
+        this.hasScored = true;
+        this.onScore();
+      }
+    } else {
+      // reset if it leaves or is still moving too fast
+      this.insideSince = null;
+    }
+  }
+
+  // Reset cup scoring state so the same Cup instance can be reused
+  public resetState() {
+    this.hasScored = false;
+    this.insideSince = null;
   }
 
   update() {}

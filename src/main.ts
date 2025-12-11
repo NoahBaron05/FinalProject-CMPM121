@@ -255,7 +255,7 @@ function createLanguageSelector() {
 function showIntroMessage() {
   const msg = document.createElement("div");
   msg.id = "introMessage";
-  msg.innerText = "Pick up the knife to begin";
+  msg.innerText = translate("intro.instructions.introMessage");
   document.body.appendChild(msg);
 
   // Fade in
@@ -268,7 +268,7 @@ function showCutRopeMessage() {
 
   const msg = document.createElement("div");
   msg.id = "introMessage";
-  msg.innerText = "Now cut the rope!";
+  msg.innerText = translate("messages.cutRope");
   document.body.appendChild(msg);
 
   // Fade in
@@ -702,16 +702,23 @@ function updateLocalizedIntro() {
   }
   const win = document.getElementById("win-text");
   if (win) win.innerText = translate("ui.winText");
+  const lose = document.getElementById("lose-text");
+  if (lose) lose.innerText = translate("ui.loseText");
   const inv = document.getElementById("inventory-label");
   if (inv) inv.innerText = translate("ui.inventory");
   const items = document.getElementById("inventory-items");
   if (items?.innerText !== "") {
     if (items) items.innerText = translate("items.Knife");
   }
+  const introMsg = document.getElementById("introMessage");
+  if (introMsg) {
+    introMsg.innerText = translate("messages.pickupKnife");
+  }
 }
 
 // Initial call to set localized text
 onLocaleChange(updateLocalizedIntro);
+updateLocalizedIntro();
 
 // --- Theme Handling ---
 function setupThemeListener(scene: THREE.Scene, rope: Rope | null) {
@@ -960,6 +967,9 @@ function rewindSimulation(
     }
     physicsWorld.removeBody(cup.bottomBody);
 
+    // reset cup internal state so if a Cup instance is reused it starts clean
+    cup.resetState();
+
     for (const seg of rope.segments) {
       physicsWorld.removeBody(seg.body);
       scene.remove(seg.mesh);
@@ -1018,11 +1028,15 @@ function rewindSimulation(
     // 5. Re-attach new ball to cup
     cup.attachBall(newRope.ballBody);
 
+    // clear cup scoring state so new attempt tracks from zero
+    cup.resetState();
+
     // Copy new values into original rope reference
     Object.assign(rope, newRope);
 
-    // Remove win text
+    // Remove win text and lose text
     document.getElementById("win-text")?.classList.remove("show");
+    document.getElementById("lose-text")?.classList.remove("show");
   }
 }
 
@@ -1059,6 +1073,7 @@ function initScene() {
   let rope: Rope | null = null;
   let cup: Cup | undefined = undefined;
   let mouseWasPressed = false;
+  let ballLostSince: number | null = null; // ms timestamp when ball settled outside cup
   setupThemeListener(scene, rope);
 
   // initialize touch controls (mobile)
@@ -1096,6 +1111,11 @@ function initScene() {
       const dz = camera.position.z - state.doorPosition.z;
       const dist = Math.sqrt(dx * dx + dz * dz);
       if (dist < 2.0) {
+        // Prevent entering unless knife is in inventory
+        if (!inventory.has("knife")) {
+          return; // Simply do nothing
+        }
+
         console.log("Entering Level 1...");
         state.current = "GAME";
 
@@ -1117,6 +1137,11 @@ function initScene() {
       updatePhysics(physicsWorld, rigidBodies, rope, deltaTime, scene);
       setupThemeListener(scene, rope);
       if (cup) cup.update();
+      // --- Lose Condition ---
+      // If ball falls below Y = -5, player misses (only if not already scored)
+      if (rope && cup && !cup.hasScored && rope.ballBody.position.y < -5) {
+        document.getElementById("lose-text")?.classList.add("show");
+      }
 
       if (rope && cup) {
         mouseWasPressed = handleInput(
@@ -1129,10 +1154,71 @@ function initScene() {
           mouseWasPressed,
           inventory,
         );
+
+        // Let the cup manage timed containment scoring (requires the
+        // ball to remain inside for a short duration before declaring a win).
+        if (!cup.hasScored) {
+          cup.updateBall(rope.ballBody);
+        }
+
+        // Immediate lose: if the ball drops below the cup opening plane by
+        // a small margin and is not inside the cup, show lose immediately.
+        if (!cup.hasScored) {
+          const ball = rope.ballBody;
+          const topY = cup.getTopY();
+          if (!cup.isBallInside(ball) && ball.position.y < topY - 0.5) {
+            document.getElementById("lose-text")?.classList.add("show");
+          }
+        }
+
+        // Timed lose detection: if the ball is not in the cup, has nearly
+        // settled (low speed) and is outside the cup opening for a short
+        // duration, show the lose text. Reset timer when ball moves or re-enters.
+        if (!cup.hasScored) {
+          const ball = rope.ballBody;
+          const vel = ball.velocity;
+          const speed = Math.sqrt(
+            vel.x * vel.x + vel.y * vel.y + vel.z * vel.z,
+          );
+          const now = performance.now();
+
+          const center = cup.getCenterXZ();
+          const dx = ball.position.x - center.x;
+          const dz = ball.position.z - center.z;
+          const horizDist = Math.sqrt(dx * dx + dz * dz);
+          const topY = cup.getTopY();
+          const topRadius = cup.getTopRadius();
+
+          const isInside = cup.isBallInside(ball);
+
+          // conditions for starting the lost timer: ball is outside opening
+          // and either below the opening plane or horizontally far from center
+          const belowOpening = ball.position.y < topY - 0.2;
+          const farFromCenter = horizDist > topRadius * 1.05;
+          const settled = speed < 0.35;
+
+          if (!isInside && settled && (belowOpening || farFromCenter)) {
+            if (ballLostSince == null) ballLostSince = now;
+
+            const elapsed = (now - ballLostSince) / 1000;
+            // show lose quickly once ball has settled outside
+            if (elapsed >= 0.25) {
+              document.getElementById("lose-text")?.classList.add("show");
+            }
+          } else {
+            ballLostSince = null;
+          }
+        }
       }
 
       if (input.keys["reset"] && rope && cup) {
-        globalThis.location.reload();
+        // Full immediate restart: clear win/lose UI and rewind the scene
+        document.getElementById("win-text")?.classList.remove("show");
+        document.getElementById("lose-text")?.classList.remove("show");
+
+        rewindSimulation(scene, physicsWorld, rope!, cup!, inventory);
+
+        input.keys["reset"] = false;
       }
     }
 

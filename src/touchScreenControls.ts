@@ -2,6 +2,7 @@ import * as CANNON from "cannon-es";
 import * as THREE from "three";
 import { Inventory } from "./Inventory.ts";
 import { Rope } from "./main.ts";
+import { onLocaleChange, translate } from "./translation.ts";
 
 export interface CameraInputLike {
   keys: Record<string, boolean>;
@@ -57,10 +58,16 @@ export function initTouchControls(opts: InitTouchControlOptions) {
   joystickBg.id = "touch-joystick-bg";
   joystickThumb.id = "touch-joystick-thumb";
   actionHint.id = "touch-action-hint";
+  actionHint.innerText = translate("ui.tapToCut");
 
   joystickBg.appendChild(joystickThumb);
   document.body.appendChild(joystickBg);
   document.body.appendChild(actionHint);
+
+  // Update button text on locale change
+  onLocaleChange(() => {
+    actionHint.innerText = translate("ui.tapToCut");
+  });
 
   // Touch state
   let leftTouchId: number | null = null;

@@ -17,7 +17,8 @@
   "ui": {
     "winText": "لقد فزت!",
     "loseText": "لقد خسرت!",
-    "inventory": "المخزون:"
+    "inventory": "المخزون:",
+    "tapToCut": "اضغط لقطع الحبل"
   },
   "messages": {
     "pickupKnife": "التقط السكين للبدء",

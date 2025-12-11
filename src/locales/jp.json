@@ -17,7 +17,8 @@
   "ui": {
     "winText": "あなたの勝ち！",
     "loseText": "あなたの負け！",
-    "inventory": "インベントリ:"
+    "inventory": "インベントリ:",
+    "tapToCut": "ロープを切るをタップしてください"
   },
   "messages": {
     "pickupKnife": "ナイフを拾って始めよう",

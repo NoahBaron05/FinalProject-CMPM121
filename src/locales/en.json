@@ -17,7 +17,8 @@
   "ui": {
     "winText": "You Win!",
     "loseText": "You Lose!",
-    "inventory": "Inventory:"
+    "inventory": "Inventory:",
+    "tapToCut": "TAP TO CUT THE ROPE"
   },
   "messages": {
     "pickupKnife": "Pick up the knife to begin",

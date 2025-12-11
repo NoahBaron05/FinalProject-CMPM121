@@ -563,7 +563,7 @@ function attemptPickup(
   document.getElementById("inventory-items")!.innerText = translate(
     "items.Knife",
   );
-  // Swap intro messages: fade out old, show new
+  // Swap intro messages: fade out old,show new
   showCutRopeMessage();
 
   // Remove from scene

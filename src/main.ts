@@ -1161,8 +1161,7 @@ function initScene() {
           cup.updateBall(rope.ballBody);
         }
 
-        // Immediate lose: if the ball drops below the cup opening plane by
-        // a small margin and is not inside the cup, show lose immediately.
+        // Immediate lose: if the ball drops below the cup opening plane by.
         if (!cup.hasScored) {
           const ball = rope.ballBody;
           const topY = cup.getTopY();

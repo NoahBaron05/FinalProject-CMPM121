@@ -101,19 +101,14 @@ canvas {
   position: absolute;
   right: 12px;
   bottom: 12px;
-  padding: 16px 24px;
-  border-radius: 12px;
-  background: rgba(0, 0, 0, 0.55);
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
   color: white;
-  font-size: 1.1rem;
-  font-weight: bold;
+  font-size: 12px;
   z-index: 10000;
+  pointer-events: none;
   user-select: none;
-  text-align: center;
-  max-width: 200px;
-  line-height: 1.4;
-  touch-action: none;
-  cursor: pointer;
 }
 
 #introMessage {

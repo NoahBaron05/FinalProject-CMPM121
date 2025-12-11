@@ -109,11 +109,7 @@ export function initTouchControls(opts: InitTouchControlOptions) {
     }, 150);
   }
 
-  function isOnActionButton(x: number, y: number): boolean {
-    const rect = actionHint.getBoundingClientRect();
-    return x >= rect.left && x <= rect.right && y >= rect.top &&
-      y <= rect.bottom;
-  }
+  // Handle both touchstart and touchcancel
   function onTouchStart(e: TouchEvent) {
     let handled = false;
     for (let i = 0; i < e.changedTouches.length; i++) {
@@ -121,14 +117,6 @@ export function initTouchControls(opts: InitTouchControlOptions) {
       const x = t.clientX;
       const y = t.clientY;
       const target = t.target as HTMLElement | null;
-
-      // Check if touch is on the action button
-      if (isOnActionButton(x, y)) {
-        ignoredTouches.add(t.identifier);
-        handled = true;
-        continue;
-      }
-
       const isUI = !!target &&
         (target.tagName === "SELECT" ||
           target.tagName === "INPUT" ||
@@ -200,21 +188,6 @@ export function initTouchControls(opts: InitTouchControlOptions) {
       const t = e.changedTouches.item(i)!;
       if (ignoredTouches.has(t.identifier)) {
         ignoredTouches.delete(t.identifier);
-        // Button was tapped — perform cut and pickup
-        const rope = getRope();
-        if (rope) {
-          try {
-            attemptCut(camera, rope, physicsWorld, scene, inventory);
-          } catch (err) {
-            console.warn("attemptCut error:", err);
-          }
-        }
-        try {
-          attemptPickup(camera, scene, inventory);
-        } catch (err) {
-          console.warn("attemptPickup error:", err);
-        }
-        handled = true;
         continue;
       }
       const _x = t.clientX;

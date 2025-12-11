@@ -20,7 +20,7 @@ const ROPE_SEGMENTS = 12; // number of rope segments
 const ROPE_SEGMENT_LENGTH = 0.5; // distance between segments
 const ROPE_ANCHOR_POINT = new CANNON.Vec3(0, 10, 0); // fixed top of rope
 const BALL_RADIUS = 0.4;
-const ROPE_SWING_FREQUENCY = 0.6; // swing frequency in Hz
+const ROPE_SWING_FREQUENCY = 0.6; // swing frequency in 
 const introMeshes: {
   mesh: THREE.Mesh;
   type: "credits" | "instructions" | "label";

@@ -110,3 +110,21 @@ canvas {
   pointer-events: none;
   user-select: none;
 }
+
+#introMessage {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 28px;
+  color: white;
+  opacity: 0;
+  transition: opacity 1.5s ease;
+  pointer-events: none;
+  text-shadow: 0 0 10px black;
+  z-index: 9999;
+}
+
+#introMessage.visible {
+  opacity: 1;
+}

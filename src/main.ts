@@ -2,14 +2,14 @@ import * as CANNON from "cannon-es";
 import * as THREE from "three";
 import { Cup } from "./Cup.ts";
 import { Inventory, InventoryUI } from "./Inventory.ts";
+import "./style.css";
+import { initTouchControls } from "./touchScreenControls.ts";
 import {
   getLocale,
   onLocaleChange,
   setLocale,
   translate,
 } from "./translation.ts";
-import "./style.css";
-import { initTouchControls } from "./touchScreenControls.ts";
 
 // Constants
 const CAMERA_SPEED = 15; // units per second
@@ -252,6 +252,35 @@ function createLanguageSelector() {
   document.body.appendChild(selector);
 }
 
+function showIntroMessage() {
+  const msg = document.createElement("div");
+  msg.id = "introMessage";
+  msg.innerText = "Pick up the knife to begin";
+  document.body.appendChild(msg);
+
+  // Fade in
+  setTimeout(() => msg.classList.add("visible"), 50);
+}
+
+function showCutRopeMessage() {
+  // Remove the previous message if still visible
+  document.getElementById("introMessage")?.remove();
+
+  const msg = document.createElement("div");
+  msg.id = "introMessage";
+  msg.innerText = "Now cut the rope!";
+  document.body.appendChild(msg);
+
+  // Fade in
+  setTimeout(() => msg.classList.add("visible"), 50);
+
+  // Auto-fade out after 5 seconds
+  setTimeout(() => {
+    msg.classList.remove("visible");
+    setTimeout(() => msg.remove(), 1000);
+  }, 5000);
+}
+
 function loadIntroLevel(
   scene: THREE.Scene,
   physicsWorld: CANNON.World,
@@ -318,6 +347,8 @@ function loadIntroLevel(
     const knife = spawnKnife(scene, physicsWorld);
     state.introObjects.push(knife.mesh);
   }
+  // Tell the user to pick up the knife
+  showIntroMessage();
 }
 
 function createRope(
@@ -532,6 +563,8 @@ function attemptPickup(
   document.getElementById("inventory-items")!.innerText = translate(
     "items.Knife",
   );
+  // Swap intro messages: fade out old, show new
+  showCutRopeMessage();
 
   // Remove from scene
   hit.parent?.remove(hit);

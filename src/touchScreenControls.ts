@@ -1,5 +1,5 @@
-import * as THREE from "three";
 import * as CANNON from "cannon-es";
+import * as THREE from "three";
 import { Inventory } from "./Inventory.ts";
 import { Rope } from "./main.ts";
 
@@ -15,7 +15,7 @@ export interface InitTouchControlOptions {
   scene: THREE.Scene;
   physicsWorld: CANNON.World;
   inventory: Inventory;
-  getRope: () => Rope;
+  getRope: () => Rope | null;
   attemptCut: (
     camera: THREE.PerspectiveCamera,
     rope: Rope,
@@ -158,7 +158,7 @@ export function initTouchControls(opts: InitTouchControlOptions) {
         const ny = Math.max(-1, Math.min(1, dy / touchRadius));
         joystickThumb.style.transform = `translate(${
           nx * (touchRadius - 24)
-        } px, ${ny * (touchRadius - 24)}px)`;
+        }px, ${ny * (touchRadius - 24)}px)`;
         setMovementFromVector(nx, ny);
         handled = true;
       } else if (rightTouchId !== null && t.identifier === rightTouchId) {

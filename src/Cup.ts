@@ -237,6 +237,4 @@ export class Cup {
     this.hasScored = false;
     this.insideSince = null;
   }
-
-  update() {}
 }

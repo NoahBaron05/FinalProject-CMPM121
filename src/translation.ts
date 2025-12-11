@@ -1,13 +1,17 @@
 // deno-lint-ignore-file no-explicit-any
+import ar from "./locales/ar.json" with { type: "json" };
 import en from "./locales/en.json" with { type: "json" };
 import jp from "./locales/jp.json" with { type: "json" };
-import ar from "./locales/ar.json" with { type: "json" };
 
 type LocaleMap = Record<string, any>;
 const resources: Record<string, LocaleMap> = { en, jp, ar };
 
 let currentLanguage = "en";
 const listeners: Array<() => void> = [];
+
+export function availableLocales(): string[] {
+  return Object.keys(resources);
+}
 
 function getNested(obj: any, path: string) {
   return path.split(".").reduce(
@@ -31,7 +35,12 @@ export function translate(
 }
 
 export function setLocale(locale: string) {
-  currentLanguage = locale;
+  if (!resources[locale]) {
+    console.warn(`Locale not found: ${locale}, falling back to 'en'`);
+    currentLanguage = "en";
+  } else {
+    currentLanguage = locale;
+  }
   listeners.forEach((cb) => cb());
 }
 

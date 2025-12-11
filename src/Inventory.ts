@@ -3,7 +3,11 @@ export class Inventory {
 
   add(itemId: string) {
     this.items.push(itemId);
-    console.log("Inventory:", this.items);
+    // keep lightweight logging for debug, safe if needed
+    if (typeof window !== "undefined") {
+      const w = window as Window & { DEBUG?: boolean };
+      if (w.DEBUG) console.log("Inventory:", this.items);
+    }
   }
 
   has(itemId: string) {
@@ -11,7 +15,8 @@ export class Inventory {
   }
 
   remove(itemId: string) {
-    this.items.splice(this.items.indexOf(itemId), 1);
+    const idx = this.items.indexOf(itemId);
+    if (idx >= 0) this.items.splice(idx, 1);
   }
 
   getAll() {
@@ -20,20 +25,24 @@ export class Inventory {
 }
 
 export class InventoryUI {
-  private container = document.getElementById("inventory-items")!;
+  private container: HTMLElement | null;
+
+  constructor() {
+    this.container = document.getElementById("inventory-items");
+  }
 
   update(inventory: Inventory) {
-    if (!this.container) return;
+    const container = this.container ??
+      document.getElementById("inventory-items");
+    if (!container) return;
 
     const items = inventory.getAll();
 
     if (items.length === 0) {
-      this.container.innerHTML = "<i>(empty)</i>";
+      container.innerHTML = "<i>(empty)</i>";
       return;
     }
 
-    this.container.innerHTML = items
-      .map((item) => `• ${item}`)
-      .join("<br>");
+    container.innerHTML = items.map((item) => `• ${item}`).join("<br>");
   }
 }

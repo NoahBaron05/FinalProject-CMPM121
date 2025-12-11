@@ -57,7 +57,6 @@ export function initTouchControls(opts: InitTouchControlOptions) {
   joystickBg.id = "touch-joystick-bg";
   joystickThumb.id = "touch-joystick-thumb";
   actionHint.id = "touch-action-hint";
-  actionHint.innerText = "Tap: interact";
 
   joystickBg.appendChild(joystickThumb);
   document.body.appendChild(joystickBg);
